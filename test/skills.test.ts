@@ -49,6 +49,12 @@ describe("adding a skill by hand", () => {
     assert.equal(result.skill.description, "");
   });
 
+  test("a name and a description longer than the View accepts are clipped, as when a SKILL.md gives them", () => {
+    const result = addSkill([], { name: "n".repeat(300), description: "d".repeat(2000) }, now, "id-1")!;
+    assert.equal(result.skill.name, "n".repeat(100));
+    assert.equal(result.skill.description, "d".repeat(500));
+  });
+
   test("a blank name adds nothing", () => {
     assert.equal(addSkill([], { name: "   " }, now, "id-1"), null);
   });

@@ -11,6 +11,14 @@ const en = {
   tab_editions: "Editions",
   coming_soon: "Coming soon.",
 
+  paste_label: "Paste a GitHub URL",
+  paste_placeholder: "github.com/owner/repo/tree/main/skills/my-skill",
+  reading: "Reading SKILL.md…",
+  already_there: "Already in your Library.",
+  not_a_skill_url: "This is not the GitHub URL of a skill.",
+  skill_not_found: "No SKILL.md was found at this URL.",
+  skill_unreadable: "The SKILL.md could not be read (check your connection).",
+
   add_manually: "Add manually",
   add_title: "Add a skill",
   name: "Name",
@@ -48,6 +56,14 @@ const fr: Messages = {
   tab_radar: "Radar",
   tab_editions: "Éditions",
   coming_soon: "Bientôt disponible.",
+
+  paste_label: "Collez une URL GitHub",
+  paste_placeholder: "github.com/owner/repo/tree/main/skills/ma-skill",
+  reading: "Lecture du SKILL.md…",
+  already_there: "Déjà dans votre Library.",
+  not_a_skill_url: "Ce n'est pas l'URL GitHub d'une skill.",
+  skill_not_found: "Aucun SKILL.md n'a été trouvé à cette URL.",
+  skill_unreadable: "Le SKILL.md n'a pas pu être lu (vérifiez votre connexion).",
 
   add_manually: "Ajouter à la main",
   add_title: "Ajouter une skill",

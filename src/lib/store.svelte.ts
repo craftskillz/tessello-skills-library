@@ -3,8 +3,9 @@
 // (CONVENTION.md §4). Skills that could not be read cannot be changed, so that an empty list never overwrites them.
 
 import type { ConnectedModule } from "@tessello/sdk";
+import { addUnlessDuplicate } from "./github.ts";
 import { t } from "./i18n.ts";
-import { addSkill, DEFAULT_QUADRANTS, type Draft, type Settings, type Skill, type Tab } from "./skills.ts";
+import { DEFAULT_QUADRANTS, type Draft, type Settings, type Skill, type Tab } from "./skills.ts";
 import { reasonOf, type SkillStorage, skillStorage } from "./storage.ts";
 
 export const skills = $state<{ list: Skill[] }>({ list: [] });
@@ -66,14 +67,18 @@ function queue(write: () => Promise<void>): Promise<void> {
   return writes;
 }
 
-/** Adds a skill made by hand and saves it. Returns false, and changes nothing, while the skills cannot be read or when the name is blank. */
-export function add(draft: Draft): boolean {
-  if (!status.loaded) return false;
-  const added = addSkill(skills.list, draft, new Date(), crypto.randomUUID());
-  if (!added) return false;
-  skills.list = added.skills;
+/**
+ * Adds a skill and saves it. When a skill, archived or not, comes from the same url, nothing is added and that skill is
+ * returned. Null, with nothing changed, while the skills cannot be read or when the name is blank.
+ */
+export function add(draft: Draft): { added: Skill } | { duplicate: Skill } | null {
+  if (!status.loaded) return null;
+  const result = addUnlessDuplicate(skills.list, draft, new Date(), crypto.randomUUID());
+  if (!result) return null;
+  if ("duplicate" in result) return result;
+  skills.list = result.skills;
   void save();
-  return true;
+  return { added: result.skill };
 }
 
 /** Opens a tab, which the View remembers. */

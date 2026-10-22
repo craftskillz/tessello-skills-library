@@ -44,18 +44,19 @@ export interface Draft {
 }
 
 /**
- * Adds a skill made by hand at the date `now`, with the id `id`, first in the list; null when its name is blank. It is
- * to watch, scored 3, in the first quadrant, with the template as its notes. A blank url is no url.
+ * Adds a skill at the date `now`, with the id `id`, first in the list; null when its name is blank. It is to watch,
+ * scored 3, in the first quadrant, with the template as its notes. A blank url is no url. The name and the description
+ * are clipped to what the View accepts, since a `SKILL.md` may give longer ones.
  */
 export function addSkill(skills: readonly Skill[], draft: Draft, now: Date, id: string): { skills: Skill[]; skill: Skill } | null {
-  const name = draft.name.trim();
+  const name = draft.name.trim().slice(0, NAME_MAX).trimEnd();
   if (!name) return null;
   const sourceUrl = draft.url?.trim();
   const skill: Skill = {
     id,
     name,
     ...(sourceUrl ? { sourceUrl } : {}),
-    description: draft.description?.trim() ?? "",
+    description: (draft.description?.trim() ?? "").slice(0, DESCRIPTION_MAX).trimEnd(),
     quadrant: 0,
     ring: "watch",
     score: 3,

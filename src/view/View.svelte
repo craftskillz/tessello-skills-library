@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { tick } from "svelte";
+  import { fetchSkill, findDuplicate, parseSkillUrl } from "../lib/github.ts";
   import { t, type MessageKey } from "../lib/i18n.ts";
-  import { linkOf, newestFirst, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX } from "../lib/skills.ts";
+  import { linkOf, newestFirst, type Skill, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX } from "../lib/skills.ts";
   import { add, load, setTab, settings, skills, status } from "../lib/store.svelte.ts";
   import Modal from "./Modal.svelte";
 
@@ -11,14 +13,100 @@
   let url = $state("");
   let description = $state("");
 
-  function openForm() {
-    name = url = description = "";
+  function openForm(prefilled = "") {
+    name = description = "";
+    url = prefilled;
     adding = true;
+  }
+
+  /** The skill whose row is highlighted a moment. */
+  let highlighted = $state("");
+  let highlightTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Highlights the row of a skill a moment, and scrolls to it. */
+  async function show(skill: Skill) {
+    highlighted = skill.id;
+    clearTimeout(highlightTimer);
+    highlightTimer = setTimeout(() => (highlighted = ""), 2000);
+    await tick();
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.querySelector(`[data-skill-id="${skill.id}"]`)?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "nearest" });
+  }
+
+  /** What a skill just added gets. The edit panel will open here (ticket 03). */
+  const select = show;
+
+  // The field to paste a GitHub URL in, and what it answers.
+  let pasted = $state("");
+  let notice = $state<{ text: string; manualUrl?: string }>({ text: "" });
+  /** The latest entry, so that a slow answer to an older one is dropped. */
+  let entry = 0;
+
+  function alreadyThere(skill: Skill) {
+    notice = { text: t("already_there") };
+    void show(skill);
+  }
+
+  /** Reads the skill at the URL and adds it, unless it is there already; an error leaves the User to add it by hand. */
+  async function addFromUrl(text: string) {
+    if (!text.trim()) return;
+    const mine = ++entry;
+    const parsed = parseSkillUrl(text);
+    if (!parsed) {
+      notice = { text: t("not_a_skill_url"), manualUrl: text.trim() };
+      return;
+    }
+    const existing = findDuplicate(skills.list, parsed.sourceUrl);
+    if (existing) {
+      alreadyThere(existing);
+      return;
+    }
+    notice = { text: t("reading") };
+    const result = await fetchSkill(parsed);
+    if (mine !== entry) return;
+    if (!result.ok) {
+      notice = { text: t(result.reason === "not_found" ? "skill_not_found" : "skill_unreadable"), manualUrl: parsed.sourceUrl };
+      return;
+    }
+    const outcome = add({ name: result.name, url: parsed.sourceUrl, description: result.description });
+    if (!outcome) {
+      notice = { text: "" };
+    } else if ("duplicate" in outcome) {
+      alreadyThere(outcome.duplicate);
+    } else {
+      notice = { text: "" };
+      pasted = "";
+      void select(outcome.added);
+    }
+  }
+
+  function submitPasted(event: SubmitEvent) {
+    event.preventDefault();
+    void addFromUrl(pasted);
+  }
+
+  /** A paste in the field adds at once. */
+  function pasteInField(event: ClipboardEvent) {
+    const text = event.clipboardData?.getData("text/plain") ?? "";
+    if (!text.trim()) return;
+    event.preventDefault();
+    pasted = text.trim();
+    void addFromUrl(text);
+  }
+
+  /** What was answered goes at the next input. */
+  function typeInField() {
+    entry++;
+    notice = { text: "" };
   }
 
   function submit(event: SubmitEvent) {
     event.preventDefault();
-    if (add({ name, url, description })) adding = false;
+    const outcome = add({ name, url, description });
+    if (!outcome) return;
+    adding = false;
+    if ("duplicate" in outcome) alreadyThere(outcome.duplicate);
+    else void select(outcome.added);
   }
 
   /** Arrow keys move between the tabs, as a tablist does. */
@@ -62,18 +150,40 @@
           </button>
         {/each}
       </div>
-      <button type="button" class="sl-btn sl-btn--primary" onclick={openForm}>{t("add_manually")}</button>
+      <button type="button" class="sl-btn sl-btn--primary" onclick={() => openForm()}>{t("add_manually")}</button>
     </header>
     {#if status.saveError}
       <p class="sl-banner" role="alert">{status.saveError}</p>
     {/if}
     <div role="tabpanel" id="panel-{settings.tab}" aria-labelledby="tab-{settings.tab}">
       {#if settings.tab === "library"}
+        <form class="sl-paste" onsubmit={submitPasted}>
+          <label>
+            {t("paste_label")}
+            <input
+              type="text"
+              inputmode="url"
+              autocomplete="off"
+              placeholder={t("paste_placeholder")}
+              bind:value={pasted}
+              oninput={typeInField}
+              onpaste={pasteInField}
+            />
+          </label>
+        </form>
+        <div class="sl-notice" role="status">
+          {#if notice.text}
+            <span>{notice.text}</span>
+            {#if notice.manualUrl}
+              <button type="button" class="sl-btn" onclick={() => openForm(notice.manualUrl)}>{t("add_manually")}</button>
+            {/if}
+          {/if}
+        </div>
         {#if shown.length}
           <ul class="sl-list">
             {#each shown as skill (skill.id)}
               {@const link = linkOf(skill)}
-              <li class="sl-skill">
+              <li class="sl-skill" class:sl-highlighted={highlighted === skill.id} data-skill-id={skill.id}>
                 <span class="sl-name">
                   {#if link}
                     <a href={link} target="_blank" rel="noopener">{skill.name}</a>
@@ -170,6 +280,42 @@
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--panel);
+  }
+  /* The row of a skill added again, or just added, shown a moment. */
+  .sl-highlighted {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .sl-paste label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+  }
+  .sl-paste input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    font: inherit;
+  }
+  .sl-paste input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+  .sl-notice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .sl-notice:empty {
+    display: none;
   }
   .sl-name {
     flex: 1 1 200px;
