@@ -3,17 +3,18 @@
 // (CONVENTION.md §4). Skills that could not be read cannot be changed, so that an empty list never overwrites them.
 
 import type { ConnectedModule } from "@tessello/sdk";
+import type { ComparedEdition } from "./changes.ts";
 import { addUnlessDuplicate, editUnlessDuplicate } from "./github.ts";
 import { t } from "./i18n.ts";
-import { DEFAULT_QUADRANTS, deleteSkill, type Draft, type Filters, type PublishedEdition, renameQuadrant as renamed, type Settings, type Skill, type SkillEdit, type Tab } from "./skills.ts";
+import { DEFAULT_QUADRANTS, deleteSkill, type Draft, type Filters, renameQuadrant as renamed, type Settings, type Skill, type SkillEdit, type Tab } from "./skills.ts";
 import { reasonOf, type SkillStorage, skillStorage } from "./storage.ts";
 
 export const skills = $state<{ list: Skill[] }>({ list: [] });
 
 export const settings = $state<Settings>({ quadrants: [...DEFAULT_QUADRANTS], tab: "library", filters: { rings: [], quadrants: [], query: "", archived: false } });
 
-/** The published editions, which decide what can be deleted: a skill that is in one is kept. */
-export const editions = $state<{ published: PublishedEdition[] }>({ published: [] });
+/** The published editions, which decide what changed since the last one, and what can be deleted: a skill that is in one is kept. */
+export const editions = $state<{ published: ComparedEdition[] }>({ published: [] });
 
 export const status = $state({
   /** False until the skills are read, and again while they cannot be read. */

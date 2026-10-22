@@ -6,6 +6,7 @@
   import { add, load, renameQuadrant, setFilters, setTab, settings, skills, status } from "../lib/store.svelte.ts";
   import EditPanel from "./EditPanel.svelte";
   import Modal from "./Modal.svelte";
+  import RadarTab from "./RadarTab.svelte";
 
   const shown = $derived(filterSkills(newestFirst(skills.list), settings.filters));
   const filtered = $derived(settings.filters.rings.length > 0 || settings.filters.quadrants.length > 0 || settings.filters.query.trim() !== "");
@@ -46,6 +47,12 @@
   function select(skill: Skill) {
     editing = skill.id;
     return show(skill);
+  }
+
+  /** A click on a point or a line of the radar opens the skill in the Library. */
+  function openFromRadar(skill: Skill) {
+    setTab("library");
+    return select(skill);
   }
 
   /** A click on a row opens its panel, unless it is on a link or a button. */
@@ -293,6 +300,8 @@
         {:else}
           <p class="sl-message">{t("empty")}</p>
         {/if}
+      {:else if settings.tab === "radar"}
+        <RadarTab onOpen={openFromRadar} />
       {:else}
         <p class="sl-message">{t("coming_soon")}</p>
       {/if}

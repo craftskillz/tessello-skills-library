@@ -49,9 +49,20 @@ In the **Library**, click **Rename quadrants** and edit the four names (1 to 40 
 
 Above the list, **Search by name** ignores case and accents. The buttons for each ring and each quadrant filter the list; select several to see skills that match any of them. **Clear filters** appears when a filter is on, and **No skill matches these filters.** when nothing is left. The page remembers your filters.
 
+## The radar
+
+The **Radar** tab draws the radar of your next edition: every skill that is not archived, as a numbered dot. Its quadrant gives the dot its colour and its corner, and its ring, from the centre outwards (Recommended, Try, Watch, Deprecated), gives its distance from the centre. A dot stays where it is until you change the ring or the quadrant of its skill.
+
+The marker tells what changed since the last edition: a circle for a skill unchanged or only updated, a diamond for a new skill or one that is back, a triangle up for a skill moved towards the centre and a triangle down for one moved away from it. The legend under the radar (beside it on a wide screen) lists the skills with the same numbers, by quadrant, then by ring, then by name.
+
+Click a dot, or a line of the legend, to open the skill in the **Library**.
+
+Under the legend, **N changes waiting** lists what the next edition would announce: new skills, skills back, skills moved (**Moved: Try → Recommended**) and skills retired (**Retired (was Watch)**). Click one to open it; a retired skill is archived, so the **Library** turns on **Show archived** to show it. Until you have published an edition, every skill is new.
+
 ## The tabs
 
 - **Library** lists your skills, the newest first, with their ring, their stars and their quadrant.
-- **Radar** and **Editions** are coming soon.
+- **Radar** draws your skills as a radar, with the changes waiting to be published.
+- **Editions** is coming soon.
 
 The page remembers the tab you left it on.
