@@ -19,7 +19,7 @@
       .map((set): RadarEntry => {
         const change = changes.get(set.id) ?? { kind: "unchanged" };
         const kind = change.kind === "retired" ? "unchanged" : change.kind;
-        return { id: set.id, name: set.name, quadrant: set.quadrant, ring: set.ring, change: kind, previousRing: "previousRing" in change ? change.previousRing : undefined };
+        return { id: set.id, name: set.name, quadrant: set.quadrant, ring: set.ring, change: kind, previousRing: "previousRing" in change ? change.previousRing : undefined, skills: set.skills };
       }),
   );
   const numbered = $derived(numberEntries(entries));
@@ -33,6 +33,7 @@
         new: t("radar_new"),
         up: t("radar_up"),
         down: t("radar_down"),
+        notEvaluated: t("radar_not_evaluated"),
       },
     }),
   );

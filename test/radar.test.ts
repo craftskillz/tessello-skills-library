@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { numberEntries, renderRadar, type RadarEntry, type RadarOptions } from "../src/lib/radar.ts";
+import { numberEntries, renderRadar, stars, type RadarEntry, type RadarOptions } from "../src/lib/radar.ts";
 import { RINGS, type Ring } from "../src/lib/skills.ts";
 
 const entry = (id: string, rest: Partial<RadarEntry> = {}): RadarEntry => ({ id, name: `Skill ${id}`, quadrant: 0, ring: "watch", change: "unchanged", ...rest });
@@ -14,6 +14,7 @@ const OPTIONS: RadarOptions = {
     new: "New or back",
     up: "Moved towards recommended",
     down: "Moved towards deprecated",
+    notEvaluated: "not evaluated",
   },
 };
 
@@ -22,7 +23,7 @@ const render = (entries: RadarEntry[], options: RadarOptions = OPTIONS) => rende
 /** The centre of each dot, read back from the drawing. */
 function positions(svg: string): Map<string, { x: number; y: number }> {
   const found = new Map<string, { x: number; y: number }>();
-  for (const match of svg.matchAll(/<g data-set-id="([^"]*)" transform="translate\(([-\d.]+) ([-\d.]+)\)"/g)) {
+  for (const match of svg.matchAll(/<g data-set-id="([^"]*)" data-number="\d+" transform="translate\(([-\d.]+) ([-\d.]+)\)"/g)) {
     found.set(match[1], { x: Number(match[2]), y: Number(match[3]) });
   }
   return found;
@@ -168,7 +169,7 @@ describe("markers", () => {
 
   test("a dot has its number and a title with its number and name", () => {
     const svg = render([entry("a", { name: "Alpha", quadrant: 0 }), entry("b", { name: "Beta", quadrant: 0 })]);
-    assert.match(dotOf(svg, "b"), /<title>2\. Beta<\/title>/);
+    assert.match(dotOf(svg, "b"), /<title>2\. Beta — Watch<\/title>/);
     assert.match(dotOf(svg, "b"), />2<\/text>/);
   });
 });
@@ -221,4 +222,36 @@ describe("the drawing", () => {
     const svg = render([], { ...OPTIONS, background: "#101418" });
     assert.match(svg, /<rect [^>]*width="100%" height="100%" fill="#101418"/);
   });
+});
+
+describe("the tooltip of a dot", () => {
+  test("names the set with its number and its ring, then a line per skill with its stars, or that it is not evaluated", () => {
+    const svg = render([entry("a", { name: "Set A", ring: "try", skills: [{ name: "One", score: 4 }, { name: "Two" }] })]);
+    assert.ok(dotOf(svg, "a").includes("<title>1. Set A — Try&#10;One ★★★★☆&#10;Two (not evaluated)</title>"));
+  });
+
+  test("is only the first line for a set without skills", () => {
+    const svg = render([entry("a", { name: "Set A", ring: "watch" }), entry("b", { name: "Set B", skills: [] })]);
+    assert.ok(dotOf(svg, "a").includes("<title>1. Set A — Watch</title>"));
+    assert.ok(dotOf(svg, "b").includes("<title>2. Set B — Watch</title>"));
+  });
+
+  test("escapes the text of the User and stays on one line", () => {
+    const svg = render([entry("a", { name: `A & <B> "C"`, skills: [{ name: "it's\nhere", score: 1 }] })]);
+    assert.ok(dotOf(svg, "a").includes("<title>1. A &amp; &lt;B&gt; &quot;C&quot; — Watch&#10;it&apos;s&#10;here ★☆☆☆☆</title>"));
+    assert.ok(!svg.includes("\n"));
+  });
+
+  test("the dot carries the id of its set and its number", () => {
+    const svg = render([entry("a", { name: "B" }), entry("b", { name: "A" })]);
+    assert.ok(svg.includes('<g data-set-id="b" data-number="1" transform='));
+    assert.ok(svg.includes('<g data-set-id="a" data-number="2" transform='));
+  });
+});
+
+test("stars are filled then empty, rounded and kept between 0 and 5", () => {
+  assert.equal(stars(3), "★★★☆☆");
+  assert.equal(stars(3.6), "★★★★☆");
+  assert.equal(stars(9), "★★★★★");
+  assert.equal(stars(-2), "☆☆☆☆☆");
 });

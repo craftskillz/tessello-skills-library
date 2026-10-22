@@ -1,8 +1,9 @@
 // The blog post of an edition: the Markdown of a post of the craftskillz blog, with its frontmatter, its radar and its cards.
 // It is a pure function of the frozen edition, which already carries the change of each skill, so it is always the same.
 
+import type { SkillChanges } from "./changes.ts";
 import type { Edition, EditionEntry, EditionSkill } from "./editions.ts";
-import { numberEntries, renderRadar, type RadarLabels } from "./radar.ts";
+import { numberEntries, renderRadar, stars, type RadarLabels } from "./radar.ts";
 import { RINGS, type Ring } from "./skills.ts";
 
 /** The words of the post, which is written in French; the cover speaks the same. */
@@ -10,16 +11,18 @@ const FRENCH_RINGS: Record<Ring, string> = { recommended: "Recommandé", try: "�
 export const POST_RADAR_LABELS: RadarLabels = {
   title: "Radar des skills",
   rings: FRENCH_RINGS,
-  unchanged: "Inchangée ou mise à jour",
-  new: "Nouvelle ou de retour",
-  up: "Rapprochée du centre",
-  down: "Éloignée du centre",
+  unchanged: "Inchangé ou mis à jour",
+  new: "Nouveau ou de retour",
+  up: "Rapproché du centre",
+  down: "Éloigné du centre",
+  notEvaluated: "pas encore évaluée",
 };
 const FOOTNOTE = "Inspiré du Technology Radar de Thoughtworks.";
 const AUTHOR_PICTURE = "/assets/blog/authors/yma_logo.png";
-/** The level of the highest heading of the notes: one under the skill's own. */
-const NOTES_LEVEL = 4;
-const STARS = 5;
+/** The level of the highest heading of the notes of a set: one under its own. */
+const SET_NOTES_LEVEL = 4;
+/** The level of the highest heading of the notes of a skill: one under its own. */
+const SKILL_NOTES_LEVEL = 5;
 
 /** The name of the post, and of the folder of its images. */
 export const postSlug = (number: number) => `skills-radar-edition-${number}`;
@@ -48,7 +51,7 @@ export function renderPost(edition: Edition): string {
   ].join("\n");
 
   const sections = [edition.intro.trim(), renderRadar(edition.entries, edition.quadrants, { labels: POST_RADAR_LABELS })];
-  if (entries.length > 0) sections.push(entries.map((entry) => `${entry.number}. ${markdownText(entry.name)} — ${FRENCH_RINGS[entry.ring]}`).join("\n"));
+  if (entries.length > 0) sections.push(entries.map((entry) => `${entry.number}. ${markdownText(entry.name)} — ${FRENCH_RINGS[entry.ring]} (${skillCount(entry)})`).join("\n"));
   if (moved.length > 0) sections.push("## Ce qui bouge", ...byRing(moved, card));
   if (rest.length > 0) sections.push("## Le reste du radar", ...byRing(rest, compactList));
   if (edition.retired.length > 0) {
@@ -74,17 +77,25 @@ function card(entries: Numbered[]): string {
       if (entry.moveReason) parts.push(entry.moveReason);
       if (entry.description.trim()) parts.push(entry.description.trim());
       if (entry.sourceUrl) parts.push(`[${markdownText(entry.sourceUrl)}](${destination(entry.sourceUrl)})`);
-      if (entry.notes.trim()) parts.push(shiftNoteHeadings(entry.notes.trim()));
-      if (entry.skills.length > 0) parts.push(entry.skills.map(skillLine).join("\n"));
+      if (entry.notes.trim()) parts.push(shiftNoteHeadings(entry.notes.trim(), SET_NOTES_LEVEL));
+      if (entry.change === "moved" && entry.skillChanges) parts.push(changeParts(entry.skillChanges).map((part) => `- ${part}`).join("\n"));
+      if (entry.skills.length > 0) parts.push(skillTable(entry.skills));
+      for (const skill of entry.skills) {
+        if (hasContent(skill.notes)) parts.push(`#### ${markdownText(skill.name)}`, shiftNoteHeadings(skill.notes.trim(), SKILL_NOTES_LEVEL));
+      }
       return parts.join("\n\n");
     })
     .join("\n\n");
 }
 
-/** A skill of a set: its name, linked when it has a source, and its stars, or that it is not rated yet. */
-function skillLine(skill: EditionSkill): string {
-  const name = markdownText(skill.name);
-  return `- ${skill.sourceUrl ? `[${name}](${destination(skill.sourceUrl)})` : name} ${skill.score === undefined ? "*Pas encore évaluée*" : stars(skill.score)}`;
+/** The table of the skills of a set: their name, linked when they have a source, their stars or that they are not rated yet, and their description. */
+function skillTable(skills: readonly EditionSkill[]): string {
+  const rows = skills.map((skill) => {
+    const name = cell(skill.name);
+    const description = cell(skill.description).trim();
+    return `| ${skill.sourceUrl ? `[${name}](${destination(skill.sourceUrl)})` : name} | ${rating(skill.score)} |${description ? ` ${description} ` : " "}|`;
+  });
+  return ["| Skill | Note | Description |", "| --- | --- | --- |", ...rows].join("\n");
 }
 
 /** A line per set: its number, its name, linked when it has a source, its number of skills, and whether it was updated. */
@@ -93,10 +104,26 @@ function compactList(entries: Numbered[]): string {
     .map((entry) => {
       const name = markdownText(entry.name);
       const title = entry.sourceUrl ? `[${name}](${destination(entry.sourceUrl)})` : name;
-      return `- **${entry.number}.** ${title} (${entry.skills.length} skill${entry.skills.length === 1 ? "" : "s"})${entry.change === "updated" ? " — *mise à jour*" : ""}`;
+      return `- **${entry.number}.** ${title} (${skillCount(entry)})${entry.change === "updated" ? ` — *mis à jour*${entry.skillChanges ? ` : ${changeParts(entry.skillChanges).join(" ; ")}` : ""}` : ""}`;
     })
     .join("\n");
 }
+
+/** How many skills a set holds, as the post says it. */
+const skillCount = (entry: EditionEntry) => `${entry.skills.length} skill${entry.skills.length === 1 ? "" : "s"}`;
+
+/** What changed among the skills of a set, a part per kind of change, none for a kind with nothing in it. */
+function changeParts({ added, removed, scores }: SkillChanges): string[] {
+  const names = (skills: { name: string }[]) => skills.map((skill) => markdownText(skill.name)).join(", ");
+  const parts: string[] = [];
+  if (added.length > 0) parts.push(`Ajoutées : ${names(added)}`);
+  if (removed.length > 0) parts.push(`Retirées : ${names(removed)}`);
+  if (scores.length > 0) parts.push(`Notes : ${scores.map((score) => `${markdownText(score.name)} ${rating(score.before)} → ${rating(score.after)}`).join(", ")}`);
+  return parts;
+}
+
+/** A score as five stars, or that the skill is not rated yet. */
+const rating = (score: number | undefined) => (score === undefined ? "*Pas encore évaluée*" : stars(score));
 
 /** What changed, as the card shows it. */
 function badge(entry: Numbered): string {
@@ -105,17 +132,11 @@ function badge(entry: Numbered): string {
   return `Déplacé : ${entry.previousRing ? FRENCH_RINGS[entry.previousRing] : "?"} → ${FRENCH_RINGS[entry.ring]}`;
 }
 
-/** The score as five stars, filled then empty. */
-const stars = (score: number) => {
-  const filled = Math.min(STARS, Math.max(0, Math.round(score)));
-  return "★".repeat(filled) + "☆".repeat(STARS - filled);
-};
-
 /**
- * The notes with their headings (ATX, outside the fenced code) lowered, or raised, so that the highest is `####`; none goes
+ * The notes with their headings (ATX, outside the fenced code) lowered, or raised, so that the highest is at `top`; none goes
  * under `######`. The rest of the notes is left as it is.
  */
-function shiftNoteHeadings(notes: string): string {
+function shiftNoteHeadings(notes: string, top: number): string {
   const lines = notes.split("\n");
   const headings = new Map<number, { level: number; rest: string }>();
   let fence: { char: string; size: number } | null = null;
@@ -133,10 +154,13 @@ function shiftNoteHeadings(notes: string): string {
     if (heading) headings.set(index, { level: heading[1].length, rest: heading[2] ?? "" });
   });
   if (headings.size === 0) return notes;
-  const shift = NOTES_LEVEL - Math.min(...[...headings.values()].map((heading) => heading.level));
+  const shift = top - Math.min(...[...headings.values()].map((heading) => heading.level));
   for (const [index, { level, rest }] of headings) lines[index] = `${"#".repeat(Math.min(6, level + shift))}${rest}`;
   return lines.join("\n");
 }
+
+/** Whether notes say something: they hold more than ATX headings and blank lines, which is all the template of a new skill holds. */
+const hasContent = (notes: string) => notes.split("\n").some((line) => line.trim() && !/^ {0,3}#{1,6}([ \t].*)?$/.test(line));
 
 /** The first paragraph of a Markdown text: up to its first blank line. */
 const firstParagraph = (markdown: string) => markdown.trim().split(/\n[ \t]*\n/)[0];
@@ -175,6 +199,9 @@ const markdownText = (value: string) =>
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/[\\`*_[\]]/g, "\\$&");
+
+/** Text written by the User, safe in a cell of a table: on one line, without the pipe that would end the cell. */
+const cell = (value: string) => markdownText(value).replace(/\|/g, "\\|");
 
 /** The destination of a link, without what would end it early. */
 const destination = (url: string) => url.trim().replace(/[\s()<>]/g, (char) => encodeURIComponent(char).replace(/[()]/g, (paren) => (paren === "(" ? "%28" : "%29")));

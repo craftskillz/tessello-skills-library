@@ -13,6 +13,8 @@ export interface RadarEntry {
   change: "new" | "back" | "moved" | "updated" | "unchanged";
   /** The ring it left, for a moved skill: the marker points towards where it went. */
   previousRing?: Ring;
+  /** The skills of the set, in order; each with its score from 1 to 5 when it was evaluated. */
+  skills?: readonly { name: string; score?: number }[];
 }
 
 /** The words the radar writes, in the language of where it is shown. */
@@ -28,6 +30,8 @@ export interface RadarLabels {
   up: string;
   /** A triangle down. */
   down: string;
+  /** What a skill without a score is said to be, in words: the radar puts them in parentheses. */
+  notEvaluated: string;
 }
 
 export interface RadarOptions {
@@ -53,6 +57,8 @@ const FONT = `system-ui, -apple-system, "Segoe UI", sans-serif`;
 const COLOURS = ["#3b78e7", "#d9730d", "#1f9d55", "#9150e0"] as const;
 /** A grey with about 4:1 of contrast on white and on near-black alike. */
 const GREY = "#7a7a7a";
+/** The stars of the highest score. */
+const STARS = 5;
 
 /** The entries in the order of their numbers: by quadrant, by ring from the centre, then by name; each with its number from 1. */
 export function numberEntries<T extends RadarEntry>(entries: readonly T[]): (T & { number: number })[] {
@@ -102,9 +108,9 @@ export function renderRadar(
   for (const entry of numbered) {
     const { x, y } = points.get(entry.id)!;
     const colour = COLOURS[entry.quadrant] ?? COLOURS[0];
-    const title = escape(`${entry.number}. ${entry.name}`);
+    const title = escape(tooltip(entry, entry.number, labels));
     parts.push(
-      `<g data-set-id="${escape(entry.id)}" transform="translate(${round(x)} ${round(y)})">` +
+      `<g data-set-id="${escape(entry.id)}" data-number="${entry.number}" transform="translate(${round(x)} ${round(y)})">` +
         marker(entry, colour) +
         `<text y="0.35em" font-size="10" font-weight="bold" text-anchor="middle" fill="#ffffff" font-family='${FONT}'>${entry.number}</text>` +
         `<title>${title}</title></g>`,
@@ -117,6 +123,19 @@ export function renderRadar(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="${label}">` +
     `<title>${label}</title>${parts.join("")}</svg>`
   );
+}
+
+/** What a dot says when hovered: its number, its name and its ring, then a line per skill with its stars. */
+function tooltip(entry: RadarEntry, number: number, labels: RadarLabels): string {
+  const lines = [`${number}. ${entry.name} — ${labels.rings[entry.ring]}`];
+  for (const skill of entry.skills ?? []) lines.push(`${skill.name} ${skill.score === undefined ? `(${labels.notEvaluated})` : stars(skill.score)}`);
+  return lines.join("\n");
+}
+
+/** The score as five stars, filled then empty. */
+export function stars(score: number): string {
+  const filled = Math.min(STARS, Math.max(0, Math.round(score)));
+  return "★".repeat(filled) + "☆".repeat(STARS - filled);
 }
 
 function marker(entry: RadarEntry, colour: string): string {
