@@ -1,41 +1,42 @@
 <script lang="ts">
-  // The side panel where the User gives a verdict on a skill. Each change is saved at once; what is refused is said
+  // The side panel where the User gives a verdict on a set and works on its skills. Each change is saved at once; what is refused is said
   // under its field, and the field keeps what was typed.
   import { t, type MessageKey } from "../lib/i18n.ts";
   import { publishedRing, REASON_MAX } from "../lib/editions.ts";
-  import { canDelete, DESCRIPTION_MAX, NAME_MAX, RINGS, type SkillEdit } from "../lib/skills.ts";
-  import { edit, editions, remove, settings, skills } from "../lib/store.svelte.ts";
+  import { canDelete, DESCRIPTION_MAX, NAME_MAX, RINGS, type Skill, type SetEdit } from "../lib/skills.ts";
+  import { addSkill, editions, editSet, remove, removeSkill, sets, settings } from "../lib/store.svelte.ts";
   import Modal from "./Modal.svelte";
+  import SkillSection from "./SkillSection.svelte";
 
   let { id, onClose }: { id: string; onClose: () => void } = $props();
 
-  // The skill is read from the store, so that the panel follows what the rest of the View does to it.
-  const skill = $derived(skills.list.find((item) => item.id === id));
+  // The set is read from the store, so that the panel follows what the rest of the View does to it.
+  const set = $derived(sets.list.find((item) => item.id === id));
 
-  // What is typed, which can differ from what is saved while a field is refused. The panel is recreated per skill.
+  // What is typed, which can differ from what is saved while a field is refused. The panel is recreated per set.
   // svelte-ignore state_referenced_locally
-  let name = $state(skill?.name ?? "");
+  let name = $state(set?.name ?? "");
   // svelte-ignore state_referenced_locally
-  let url = $state(skill?.sourceUrl ?? "");
+  let url = $state(set?.sourceUrl ?? "");
   // svelte-ignore state_referenced_locally
-  let description = $state(skill?.description ?? "");
+  let description = $state(set?.description ?? "");
   // svelte-ignore state_referenced_locally
-  let notes = $state(skill?.notes ?? "");
+  let notes = $state(set?.notes ?? "");
   // svelte-ignore state_referenced_locally
-  let reason = $state(skill?.moveReason ?? "");
+  let reason = $state(set?.moveReason ?? "");
   let errors = $state({ name: "", url: "", notes: "", reason: "" });
 
-  /** Whether the ring differs from the one the last edition published, which asks for an explanation; an archived skill is retired instead. */
+  /** Whether the ring differs from the one the last edition published, which asks for an explanation; an archived set is retired instead. */
   const moved = $derived.by(() => {
     const published = publishedRing(id, editions.published);
-    return published !== undefined && skill !== undefined && !skill.archived && published !== skill.ring;
+    return published !== undefined && set !== undefined && !set.archived && published !== set.ring;
   });
 
   // While the field is hidden it follows the saved explanation: none after a move back to the published ring, so that
-  // moving away again starts from an empty field, and the one kept while the skill was archived when it comes back.
+  // moving away again starts from an empty field, and the one kept while the set was archived when it comes back.
   $effect(() => {
     if (!moved) {
-      reason = skill?.moveReason ?? "";
+      reason = set?.moveReason ?? "";
       errors.reason = "";
     }
   });
@@ -48,8 +49,8 @@
   });
 
   /** Saves a change; the message of the field it was refused for, if any. */
-  function save(change: SkillEdit): "name_required" | "notes_too_long" | "reason_too_long" | "url_taken" | "" {
-    const result = edit(id, change);
+  function save(change: SetEdit): "name_required" | "notes_too_long" | "reason_too_long" | "url_taken" | "" {
+    const result = editSet(id, change);
     if (!result) return "";
     if ("duplicate" in result) return "url_taken";
     return "error" in result ? result.error : "";
@@ -57,10 +58,43 @@
 
   const refuse = (key: "name" | "url" | "notes" | "reason", message: string) => (errors[key] = message ? t(message as MessageKey) : "");
 
-  let savedUrl = $derived(skill?.sourceUrl ?? "");
+  let savedUrl = $derived(set?.sourceUrl ?? "");
   function commitUrl() {
     if (url.trim() === savedUrl && !errors.url) return;
     refuse("url", save({ sourceUrl: url }));
+  }
+
+  // The dialog that adds a skill to the set, and the one that confirms the removal of a skill.
+  let adding = $state(false);
+  let skillName = $state("");
+  let skillUrl = $state("");
+  let skillDescription = $state("");
+  let skillError = $state("");
+  /** The skill whose removal is to be confirmed. */
+  let removing = $state<Skill | null>(null);
+  /** The skill just added, whose section opens. */
+  let justAdded = $state("");
+
+  function openAdd() {
+    skillName = skillUrl = skillDescription = skillError = "";
+    adding = true;
+  }
+
+  function submitSkill(event: SubmitEvent) {
+    event.preventDefault();
+    const result = addSkill(id, { name: skillName, url: skillUrl, description: skillDescription });
+    if (!result) return;
+    if ("error" in result) {
+      skillError = t("skill_url_taken");
+      return;
+    }
+    adding = false;
+    justAdded = result.added.id;
+  }
+
+  function confirmRemove() {
+    if (removing) removeSkill(id, removing.id);
+    removing = null;
   }
 
   /** Whether the dialog that asks to confirm a deletion is open. */
@@ -83,16 +117,14 @@
     if (dialogs[dialogs.length - 1] === panel) close();
   }
 
-  /** The scores a skill can have. */
-  const SCORES = [1, 2, 3, 4, 5];
 </script>
 
 <svelte:window onkeydown={onKey} />
 
-{#if skill}
+{#if set}
   <div class="sl-panel" role="dialog" aria-labelledby={titleId} bind:this={panel}>
     <header class="sl-panel-head">
-      <h3 id={titleId}>{skill.name}</h3>
+      <h3 id={titleId}>{set.name}</h3>
       <button type="button" class="sl-btn" onclick={close}>{t("close")}</button>
     </header>
     <div class="sl-panel-body">
@@ -127,7 +159,7 @@
       </label>
       <label>
         {t("quadrant")}
-        <select value={String(skill.quadrant)} onchange={(event) => save({ quadrant: Number(event.currentTarget.value) })}>
+        <select value={String(set.quadrant)} onchange={(event) => save({ quadrant: Number(event.currentTarget.value) })}>
           {#each settings.quadrants as quadrant, index (index)}
             <option value={String(index)}>{quadrant}</option>
           {/each}
@@ -137,30 +169,13 @@
         <legend>{t("ring")}</legend>
         {#each RINGS as ring (ring)}
           <label class="sl-radio">
-            <input type="radio" name="ring-{id}" checked={skill.ring === ring} onchange={() => save({ ring })} />
+            <input type="radio" name="ring-{id}" checked={set.ring === ring} onchange={() => save({ ring })} />
             {t(`ring_${ring}` as MessageKey)}
           </label>
         {/each}
       </fieldset>
-      <fieldset class="sl-choice">
-        <legend>{t("score")}</legend>
-        <div class="sl-scores">
-          {#each SCORES as score (score)}
-            <label class="sl-star" class:sl-star--on={score <= skill.score}>
-              <input
-                type="radio"
-                name="score-{id}"
-                aria-label={t("stars", { score })}
-                checked={skill.score === score}
-                onchange={() => save({ score })}
-              />
-              <span aria-hidden="true">{score <= skill.score ? "★" : "☆"}</span>
-            </label>
-          {/each}
-        </div>
-      </fieldset>
       <label>
-        {t("notes")}
+        {t("set_notes")}
         <textarea
           class="sl-notes"
           rows="14"
@@ -183,9 +198,20 @@
           {#if errors.reason}<span class="sl-error" role="alert">{errors.reason}</span>{/if}
         </label>
       {/if}
+      <section class="sl-skills" aria-label={t("skills_heading")}>
+        <div class="sl-skills-head">
+          <h4>{t("skills_heading")}</h4>
+          <button type="button" class="sl-btn" onclick={openAdd}>{t("add_skill")}</button>
+        </div>
+        {#each set.skills as skill (skill.id)}
+          <SkillSection setId={id} {skill} open={skill.id === justAdded} onRemove={(item) => (removing = item)} />
+        {:else}
+          <p class="sl-skills-none">{t("skills_none")}</p>
+        {/each}
+      </section>
       <div class="sl-panel-actions">
-        <button type="button" class="sl-btn" onclick={() => save({ archived: !skill.archived })}>
-          {skill.archived ? t("unarchive") : t("archive")}
+        <button type="button" class="sl-btn" onclick={() => save({ archived: !set.archived })}>
+          {set.archived ? t("unarchive") : t("archive")}
         </button>
         {#if canDelete(id, editions.published)}
           <button type="button" class="sl-btn sl-btn--danger" onclick={() => (confirming = true)}>{t("delete")}</button>
@@ -194,7 +220,37 @@
     </div>
   </div>
 
-  <Modal open={confirming} title={t("delete_title", { name: skill.name })} onClose={() => (confirming = false)}>
+  <Modal open={adding} title={t("add_skill_title")} onClose={() => (adding = false)}>
+    <form id="sl-add-skill-form" class="sl-form" onsubmit={submitSkill}>
+      <label>
+        {t("name")}
+        <input type="text" required maxlength={NAME_MAX} autocomplete="off" bind:value={skillName} />
+      </label>
+      <label>
+        {t("url")}
+        <input type="text" inputmode="url" autocomplete="off" aria-invalid={skillError ? "true" : undefined} bind:value={skillUrl} oninput={() => (skillError = "")} />
+        {#if skillError}<span class="sl-error" role="alert">{skillError}</span>{/if}
+      </label>
+      <label>
+        {t("description")}
+        <textarea rows="3" maxlength={DESCRIPTION_MAX} bind:value={skillDescription}></textarea>
+      </label>
+    </form>
+    {#snippet actions()}
+      <button type="button" class="sl-btn" onclick={() => (adding = false)}>{t("cancel")}</button>
+      <button type="submit" form="sl-add-skill-form" class="sl-btn sl-btn--primary" disabled={!skillName.trim()}>{t("add")}</button>
+    {/snippet}
+  </Modal>
+
+  <Modal open={removing !== null} title={t("remove_title", { name: removing?.name ?? "" })} onClose={() => (removing = null)}>
+    <p>{t("remove_body")}</p>
+    {#snippet actions()}
+      <button type="button" class="sl-btn" onclick={() => (removing = null)}>{t("cancel")}</button>
+      <button type="button" class="sl-btn sl-btn--danger" onclick={confirmRemove}>{t("remove_from_set")}</button>
+    {/snippet}
+  </Modal>
+
+  <Modal open={confirming} title={t("delete_title", { name: set.name })} onClose={() => (confirming = false)}>
     <p>{t("delete_body")}</p>
     {#snippet actions()}
       <button type="button" class="sl-btn" onclick={() => (confirming = false)}>{t("cancel")}</button>
@@ -305,30 +361,44 @@
     align-items: center;
     gap: 6px;
   }
-  .sl-scores {
+  .sl-skills {
     display: flex;
-    gap: 2px;
+    flex-direction: column;
+    gap: 8px;
   }
-  .sl-panel-body .sl-star {
-    position: relative;
-    flex-direction: row;
-    font-size: 26px;
-    line-height: 1;
-    color: var(--muted);
-    cursor: pointer;
+  .sl-skills-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
   }
-  .sl-star--on {
-    color: var(--accent-strong);
-  }
-  .sl-star input {
-    position: absolute;
-    inset: 0;
+  .sl-skills-head h4 {
     margin: 0;
-    opacity: 0;
-    cursor: pointer;
+    font-size: 14px;
   }
-  .sl-star:has(input:focus-visible) {
-    outline: 2px solid var(--accent);
-    border-radius: 4px;
+  .sl-skills-none {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .sl-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .sl-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+  }
+  .sl-form input,
+  .sl-form textarea {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    font: inherit;
   }
 </style>

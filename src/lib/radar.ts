@@ -104,7 +104,7 @@ export function renderRadar(
     const colour = COLOURS[entry.quadrant] ?? COLOURS[0];
     const title = escape(`${entry.number}. ${entry.name}`);
     parts.push(
-      `<g data-skill-id="${escape(entry.id)}" transform="translate(${round(x)} ${round(y)})">` +
+      `<g data-set-id="${escape(entry.id)}" transform="translate(${round(x)} ${round(y)})">` +
         marker(entry, colour) +
         `<text y="0.35em" font-size="10" font-weight="bold" text-anchor="middle" fill="#ffffff" font-family='${FONT}'>${entry.number}</text>` +
         `<title>${title}</title></g>`,

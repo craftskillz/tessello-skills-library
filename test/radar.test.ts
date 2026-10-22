@@ -22,14 +22,14 @@ const render = (entries: RadarEntry[], options: RadarOptions = OPTIONS) => rende
 /** The centre of each dot, read back from the drawing. */
 function positions(svg: string): Map<string, { x: number; y: number }> {
   const found = new Map<string, { x: number; y: number }>();
-  for (const match of svg.matchAll(/<g data-skill-id="([^"]*)" transform="translate\(([-\d.]+) ([-\d.]+)\)"/g)) {
+  for (const match of svg.matchAll(/<g data-set-id="([^"]*)" transform="translate\(([-\d.]+) ([-\d.]+)\)"/g)) {
     found.set(match[1], { x: Number(match[2]), y: Number(match[3]) });
   }
   return found;
 }
 
 /** The drawing of one dot: from its opening tag to its closing one. */
-const dotOf = (svg: string, id: string) => svg.match(new RegExp(`<g data-skill-id="${id}".*?</g>`))![0];
+const dotOf = (svg: string, id: string) => svg.match(new RegExp(`<g data-set-id="${id}".*?</g>`))![0];
 
 const CENTRE = { x: 260, y: 270 };
 const RADIUS = 230;

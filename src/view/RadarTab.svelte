@@ -1,25 +1,25 @@
 <script lang="ts">
-  // The Radar tab: the radar of the next edition (the skills not archived), its numbered legend and the changes waiting.
-  import { type Change, changesSince, isPending, pendingCount } from "../lib/changes.ts";
+  // The Radar tab: the radar of the next edition (the sets not archived), its numbered legend and the changes waiting.
+  import { changesSince, isPending, pendingCount } from "../lib/changes.ts";
   import { missingReasons, nextNumber as numberAfter } from "../lib/editions.ts";
   import { type MessageKey, t } from "../lib/i18n.ts";
   import { numberEntries, type RadarEntry, renderRadar } from "../lib/radar.ts";
-  import { RINGS, type Ring, type Skill } from "../lib/skills.ts";
-  import { editions, publish, settings, skills } from "../lib/store.svelte.ts";
+  import { RINGS, type Ring, type SkillSet } from "../lib/skills.ts";
+  import { editions, publish, sets, settings } from "../lib/store.svelte.ts";
+  import { changeTag, ringName } from "./change-tag.ts";
   import Modal from "./Modal.svelte";
 
-  let { onOpen }: { onOpen: (skill: Skill) => void } = $props();
+  let { onOpen }: { onOpen: (set: SkillSet) => void } = $props();
 
-  const changes = $derived(changesSince(skills.list, editions.published));
-  const ringName = (ring: Ring) => t(`ring_${ring}` as MessageKey);
+  const changes = $derived(changesSince(sets.list, editions.published));
 
   const entries = $derived(
-    skills.list
-      .filter((skill) => !skill.archived)
-      .map((skill): RadarEntry => {
-        const change = changes.get(skill.id) ?? { kind: "unchanged" };
+    sets.list
+      .filter((set) => !set.archived)
+      .map((set): RadarEntry => {
+        const change = changes.get(set.id) ?? { kind: "unchanged" };
         const kind = change.kind === "retired" ? "unchanged" : change.kind;
-        return { id: skill.id, name: skill.name, quadrant: skill.quadrant, ring: skill.ring, change: kind, previousRing: "previousRing" in change ? change.previousRing : undefined };
+        return { id: set.id, name: set.name, quadrant: set.quadrant, ring: set.ring, change: kind, previousRing: "previousRing" in change ? change.previousRing : undefined };
       }),
   );
   const numbered = $derived(numberEntries(entries));
@@ -37,24 +37,17 @@
     }),
   );
 
-  const pending = $derived(skills.list.filter((skill) => {
-      const change = changes.get(skill.id);
+  const pending = $derived(sets.list.filter((set) => {
+      const change = changes.get(set.id);
       return change !== undefined && isPending(change);
     }));
   const count = $derived(pendingCount(changes));
   const heading = $derived(count === 0 ? t("radar_changes_none") : count === 1 ? t("radar_changes_one") : t("radar_changes", { count }));
 
-  /** What a pending change says of its skill: New, Back, Moved: Try → Recommended, Retired (was Watch). */
-  function tag(skill: Skill, change: Change): string {
-    if (change.kind === "moved") return t("change_moved", { from: ringName(change.previousRing), to: ringName(skill.ring) });
-    if (change.kind === "retired") return t("change_retired", { ring: ringName(change.previousRing) });
-    return t(change.kind === "back" ? "change_back" : "change_new");
-  }
-
   // The dialog that publishes the next edition: the introduction, then the confirmation.
   const nextNumber = $derived(numberAfter(editions.published));
-  /** The skills that moved without an explanation, which stop the publication. */
-  const missing = $derived(missingReasons(skills.list, editions.published));
+  /** The sets that moved without an explanation, which stop the publication. */
+  const missing = $derived(missingReasons(sets.list, editions.published));
   let publishing = $state(false);
   let step = $state<"intro" | "confirm">("intro");
   let intro = $state("");
@@ -78,17 +71,17 @@
     else step = "intro";
   }
 
-  /** A skill that needs its explanation: the dialog closes and the skill opens. */
-  function explain(skill: Skill) {
+  /** A set that needs its explanation: the dialog closes and the set opens. */
+  function explain(set: SkillSet) {
     publishing = false;
-    onOpen(skill);
+    onOpen(set);
   }
 
-  /** A click on a point of the radar opens its skill. */
+  /** A click on a point of the radar opens its set. */
   function onRadarClick(event: MouseEvent) {
-    const id = (event.target as Element).closest("[data-skill-id]")?.getAttribute("data-skill-id");
-    const skill = skills.list.find((item) => item.id === id);
-    if (skill) onOpen(skill);
+    const id = (event.target as Element).closest("[data-set-id]")?.getAttribute("data-set-id");
+    const set = sets.list.find((item) => item.id === id);
+    if (set) onOpen(set);
   }
 </script>
 
@@ -108,7 +101,7 @@
             <ul class="sl-legend-list">
               {#each group as entry (entry.id)}
                 <li>
-                  <button type="button" class="sl-legend-line" onclick={() => onOpen(skills.list.find((item) => item.id === entry.id)!)}>
+                  <button type="button" class="sl-legend-line" onclick={() => onOpen(sets.list.find((item) => item.id === entry.id)!)}>
                     {entry.number}. {entry.name} — {ringName(entry.ring)}
                   </button>
                 </li>
@@ -126,11 +119,11 @@
     <h3 class="sl-legend-heading">{heading}</h3>
     {#if pending.length}
       <ul class="sl-legend-list" aria-label={t("radar_changes_list")}>
-        {#each pending as skill (skill.id)}
+        {#each pending as set (set.id)}
           <li>
-            <button type="button" class="sl-legend-line" onclick={() => onOpen(skill)}>
-              {skill.name}
-              <span class="sl-tag">{tag(skill, changes.get(skill.id)!)}</span>
+            <button type="button" class="sl-legend-line" onclick={() => onOpen(set)}>
+              {set.name}
+              <span class="sl-tag">{changeTag(set, changes.get(set.id))}</span>
             </button>
           </li>
         {/each}
@@ -143,8 +136,8 @@
   {#if missing.length > 0}
     <p>{t("publish_missing")}</p>
     <ul class="sl-legend-list">
-      {#each missing as skill (skill.id)}
-        <li><button type="button" class="sl-legend-line" onclick={() => explain(skill)}>{skill.name}</button></li>
+      {#each missing as set (set.id)}
+        <li><button type="button" class="sl-legend-line" onclick={() => explain(set)}>{set.name}</button></li>
       {/each}
     </ul>
   {:else if step === "intro"}
@@ -219,7 +212,7 @@
     width: 100%;
     height: auto;
   }
-  .sl-radar :global([data-skill-id]) {
+  .sl-radar :global([data-set-id]) {
     cursor: pointer;
   }
   .sl-legend {

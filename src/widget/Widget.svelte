@@ -16,8 +16,8 @@
 
   async function refresh() {
     try {
-      const [skills, editions] = await Promise.all([storage.read(), storage.readEditions()]);
-      summary = widgetSummary(skills, editions);
+      const [sets, editions] = await Promise.all([storage.read(), storage.readEditions()]);
+      summary = widgetSummary(sets, editions);
       error = "";
     } catch {
       error = t("widget_error");
@@ -26,7 +26,7 @@
 
   onMount(() => {
     void refresh();
-    // The View may have changed the skills while the Widget was hidden behind it.
+    // The View may have changed the sets while the Widget was hidden behind it.
     return host.onVisibilityChange((visible) => visible && void refresh());
   });
 </script>

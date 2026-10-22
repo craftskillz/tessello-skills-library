@@ -1,15 +1,18 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import { changesSince } from "../lib/changes.ts";
   import { fetchSkill, findDuplicate, parseSkillUrl } from "../lib/github.ts";
   import { t, type MessageKey } from "../lib/i18n.ts";
-  import { type Filters, filterSkills, linkOf, newestFirst, type Ring, RINGS, type Skill, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX, QUADRANT_NAME_MAX } from "../lib/skills.ts";
-  import { add, load, renameQuadrant, setFilters, setTab, settings, skills, status } from "../lib/store.svelte.ts";
+  import { type Filters, filterSets, linkOf, newestFirst, type Ring, RINGS, type SkillSet, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX, QUADRANT_NAME_MAX } from "../lib/skills.ts";
+  import { addSet, addSetOfOneSkill, editions, load, renameQuadrant, setFilters, setTab, sets, settings, status } from "../lib/store.svelte.ts";
+  import { changeTag, skillCountLabel } from "./change-tag.ts";
   import EditionsTab from "./EditionsTab.svelte";
   import EditPanel from "./EditPanel.svelte";
   import Modal from "./Modal.svelte";
   import RadarTab from "./RadarTab.svelte";
 
-  const shown = $derived(filterSkills(newestFirst(skills.list), settings.filters));
+  const shown = $derived(filterSets(newestFirst(sets.list), settings.filters));
+  const changes = $derived(changesSince(sets.list, editions.published));
   const filtered = $derived(settings.filters.rings.length > 0 || settings.filters.quadrants.length > 0 || settings.filters.query.trim() !== "");
 
   let adding = $state(false);
@@ -23,43 +26,43 @@
     adding = true;
   }
 
-  /** The skill whose row is highlighted a moment. */
+  /** The set whose row is highlighted a moment. */
   let highlighted = $state("");
   let highlightTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** No filter on, with the archived skills shown or not. */
   const cleared = (archived: boolean): Filters => ({ rings: [], quadrants: [], query: "", archived });
 
-  /** Highlights the row of a skill a moment, and scrolls to it; filters that hide it are cleared, and archived skills shown when it is one. */
-  async function show(skill: Skill) {
-    if (!shown.some((item) => item.id === skill.id)) setFilters(cleared(skill.archived || settings.filters.archived));
-    highlighted = skill.id;
+  /** Highlights the row of a set a moment, and scrolls to it; filters that hide it are cleared, and archived sets shown when it is one. */
+  async function show(set: SkillSet) {
+    if (!shown.some((item) => item.id === set.id)) setFilters(cleared(set.archived || settings.filters.archived));
+    highlighted = set.id;
     clearTimeout(highlightTimer);
     highlightTimer = setTimeout(() => (highlighted = ""), 2000);
     await tick();
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    document.querySelector(`[data-skill-id="${skill.id}"]`)?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "nearest" });
+    document.querySelector(`[data-set-id="${set.id}"]`)?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "nearest" });
   }
 
-  /** The skill whose edit panel is open. */
+  /** The set whose edit panel is open. */
   let editing = $state("");
 
-  /** What a skill just added gets: its row is shown, and its edit panel opens. */
-  function select(skill: Skill) {
-    editing = skill.id;
-    return show(skill);
+  /** What a set just added gets: its row is shown, and its edit panel opens. */
+  function select(set: SkillSet) {
+    editing = set.id;
+    return show(set);
   }
 
-  /** A click on a point or a line of the radar opens the skill in the Library. */
-  function openFromRadar(skill: Skill) {
+  /** A click on a point or a line of the radar opens the set in the Library. */
+  function openFromRadar(set: SkillSet) {
     setTab("library");
-    return select(skill);
+    return select(set);
   }
 
   /** A click on a row opens its panel, unless it is on a link or a button. */
-  function onRowClick(event: MouseEvent, skill: Skill) {
+  function onRowClick(event: MouseEvent, set: SkillSet) {
     if ((event.target as HTMLElement).closest("a, button")) return;
-    editing = skill.id;
+    editing = set.id;
   }
 
   function toggle<T>(list: T[], value: T): T[] {
@@ -87,12 +90,12 @@
   /** The latest entry, so that a slow answer to an older one is dropped. */
   let entry = 0;
 
-  function alreadyThere(skill: Skill) {
+  function alreadyThere(set: SkillSet) {
     notice = { text: t("already_there") };
-    void show(skill);
+    void show(set);
   }
 
-  /** Reads the skill at the URL and adds it, unless it is there already; an error leaves the User to add it by hand. */
+  /** Reads the skill at the URL and adds it as a set of one skill, unless it is there already; an error leaves the User to add it by hand. */
   async function addFromUrl(text: string) {
     if (!text.trim()) return;
     const mine = ++entry;
@@ -101,7 +104,7 @@
       notice = { text: t("not_a_skill_url"), manualUrl: text.trim() };
       return;
     }
-    const existing = findDuplicate(skills.list, parsed.sourceUrl);
+    const existing = findDuplicate(sets.list, parsed.sourceUrl);
     if (existing) {
       alreadyThere(existing);
       return;
@@ -113,7 +116,7 @@
       notice = { text: t(result.reason === "not_found" ? "skill_not_found" : "skill_unreadable"), manualUrl: parsed.sourceUrl };
       return;
     }
-    const outcome = add({ name: result.name, url: parsed.sourceUrl, description: result.description });
+    const outcome = addSetOfOneSkill({ name: result.name, url: parsed.sourceUrl, description: result.description });
     if (!outcome) {
       notice = { text: "" };
     } else if ("duplicate" in outcome) {
@@ -147,7 +150,7 @@
 
   function submit(event: SubmitEvent) {
     event.preventDefault();
-    const outcome = add({ name, url, description });
+    const outcome = addSet({ name, url, description });
     if (!outcome) return;
     adding = false;
     if ("duplicate" in outcome) alreadyThere(outcome.duplicate);
@@ -164,8 +167,6 @@
     document.getElementById(`tab-${next}`)?.focus();
   }
 
-  /** The score as stars: ★★★☆☆. */
-  const stars = (score: number) => "★".repeat(score) + "☆".repeat(5 - score);
 </script>
 
 <div class="sl-root" class:sl-root--panel={editing !== ""}>
@@ -199,7 +200,7 @@
         {#if settings.tab === "library"}
           <button type="button" class="sl-btn" onclick={openRename}>{t("rename_quadrants")}</button>
         {/if}
-        <button type="button" class="sl-btn sl-btn--primary" onclick={() => openForm()}>{t("add_manually")}</button>
+        <button type="button" class="sl-btn sl-btn--primary" onclick={() => openForm()}>{t("new_set")}</button>
       </div>
     </header>
     {#if status.saveError}
@@ -225,11 +226,11 @@
           {#if notice.text}
             <span>{notice.text}</span>
             {#if notice.manualUrl}
-              <button type="button" class="sl-btn" onclick={() => openForm(notice.manualUrl)}>{t("add_manually")}</button>
+              <button type="button" class="sl-btn" onclick={() => openForm(notice.manualUrl)}>{t("new_set")}</button>
             {/if}
           {/if}
         </div>
-        {#if skills.list.length}
+        {#if sets.list.length}
           <div class="sl-filters">
             <label class="sl-search">
               {t("search")}
@@ -277,26 +278,28 @@
         {/if}
         {#if shown.length}
           <ul class="sl-list">
-            {#each shown as skill (skill.id)}
-              {@const link = linkOf(skill)}
+            {#each shown as set (set.id)}
+              {@const link = linkOf(set)}
+              {@const tag = changeTag(set, changes.get(set.id))}
               <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-              <li class="sl-skill" class:sl-highlighted={highlighted === skill.id} class:sl-archived={skill.archived} data-skill-id={skill.id} onclick={(event) => onRowClick(event, skill)}>
+              <li class="sl-set" class:sl-highlighted={highlighted === set.id} class:sl-archived={set.archived} data-set-id={set.id} onclick={(event) => onRowClick(event, set)}>
                 <span class="sl-name">
                   {#if link}
-                    <a href={link} target="_blank" rel="noopener">{skill.name}</a>
+                    <a href={link} target="_blank" rel="noopener">{set.name}</a>
                   {:else}
-                    {skill.name}
+                    {set.name}
                   {/if}
                 </span>
-                <button type="button" class="sl-btn" aria-label={t("edit_skill", { name: skill.name })} onclick={() => (editing = skill.id)}>✎</button>
-                <span class="sl-ring sl-ring--{skill.ring}">{t(`ring_${skill.ring}` as MessageKey)}</span>
-                <span class="sl-stars" role="img" aria-label={t("stars", { score: skill.score })}>{stars(skill.score)}</span>
-                <span class="sl-quadrant">{settings.quadrants[skill.quadrant]}</span>
-                {#if skill.archived}<span class="sl-tag">{t("archived_tag")}</span>{/if}
+                <button type="button" class="sl-btn" aria-label={t("edit_set", { name: set.name })} onclick={() => (editing = set.id)}>✎</button>
+                <span class="sl-ring sl-ring--{set.ring}">{t(`ring_${set.ring}` as MessageKey)}</span>
+                <span class="sl-count">{skillCountLabel(set)}</span>
+                <span class="sl-quadrant">{settings.quadrants[set.quadrant]}</span>
+                {#if tag}<span class="sl-tag">{tag}</span>{/if}
+                {#if set.archived}<span class="sl-tag">{t("archived_tag")}</span>{/if}
               </li>
             {/each}
           </ul>
-        {:else if skills.list.length}
+        {:else if sets.list.length}
           <p class="sl-message">{t("no_match")}</p>
         {:else}
           <p class="sl-message">{t("empty")}</p>
@@ -339,7 +342,7 @@
     {/snippet}
   </Modal>
 
-  <Modal open={adding} title={t("add_title")} onClose={() => (adding = false)}>
+  <Modal open={adding} title={t("new_set_title")} onClose={() => (adding = false)}>
     <form id="sl-add-form" class="sl-form" onsubmit={submit}>
       <label>
         {t("name")}
@@ -435,10 +438,10 @@
     gap: 6px;
     font-size: 13px;
   }
-  .sl-skill {
+  .sl-set {
     cursor: pointer;
   }
-  /* An archived skill is shown, when asked, but set apart. */
+  /* An archived set is shown, when asked, but set apart. */
   .sl-archived {
     opacity: 0.55;
   }
@@ -480,7 +483,7 @@
     flex-direction: column;
     gap: 8px;
   }
-  .sl-skill {
+  .sl-set {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -490,7 +493,7 @@
     border-radius: 10px;
     background: var(--panel);
   }
-  /* The row of a skill added again, or just added, shown a moment. */
+  /* The row of a set added again, or just added, shown a moment. */
   .sl-highlighted {
     outline: 3px solid var(--accent);
     outline-offset: 2px;
@@ -540,9 +543,9 @@
     font-size: 12px;
     color: var(--muted);
   }
-  .sl-stars {
-    letter-spacing: 1px;
-    color: var(--accent-strong);
+  .sl-count {
+    font-size: 12px;
+    color: var(--muted);
     white-space: nowrap;
   }
   .sl-message {

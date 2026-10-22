@@ -1,25 +1,25 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { Edition } from "../src/lib/editions.ts";
-import type { Skill } from "../src/lib/skills.ts";
+import type { SkillSet } from "../src/lib/skills.ts";
 import { widgetSummary } from "../src/lib/widget.ts";
 
-const skill = (id: string, rest: Partial<Skill> = {}): Skill => ({
+const skill = (id: string, rest: Partial<SkillSet> = {}): SkillSet => ({
   id,
-  name: `Skill ${id}`,
+  name: `Set ${id}`,
   description: "",
   quadrant: 0,
   ring: "watch",
-  score: 3,
   notes: "",
+  skills: [],
   addedAt: "2026-10-01T00:00:00.000Z",
   updatedAt: "2026-10-01T00:00:00.000Z",
   archived: false,
   ...rest,
 });
 
-/** An edition that published the given skills as they are. */
-const edition = (number: number, publishedAt: string, ...published: Skill[]): Edition => ({
+/** An edition that published the given sets as they are. */
+const edition = (number: number, publishedAt: string, ...published: SkillSet[]): Edition => ({
   number,
   publishedAt,
   intro: "Intro",
@@ -30,20 +30,20 @@ const edition = (number: number, publishedAt: string, ...published: Skill[]): Ed
     description: s.description,
     quadrant: s.quadrant,
     ring: s.ring,
-    score: s.score,
     notes: s.notes,
+    skills: s.skills.map((k) => ({ id: k.id, name: k.name, description: k.description, ...(k.score !== undefined ? { score: k.score } : {}), notes: k.notes })),
     change: "unchanged",
   })),
   retired: [],
 });
 
-describe("the skills per ring", () => {
-  test("counts the skills not archived of each ring, zeros included", () => {
+describe("the sets per ring", () => {
+  test("counts the sets not archived of each ring, zeros included", () => {
     const skills = [skill("a", { ring: "try" }), skill("b", { ring: "try" }), skill("c"), skill("d", { ring: "try", archived: true })];
     assert.deepEqual(widgetSummary(skills, []).counts, { recommended: 0, try: 2, watch: 1, deprecated: 0 });
   });
 
-  test("all zeros when there is no skill", () => {
+  test("all zeros when there is no set", () => {
     assert.deepEqual(widgetSummary([], []).counts, { recommended: 0, try: 0, watch: 0, deprecated: 0 });
   });
 });
@@ -75,9 +75,10 @@ describe("the changes that wait", () => {
     assert.equal(widgetSummary([{ ...published, ring: "try" }], editions).pending, 1);
   });
 
-  test("a skill whose notes or score changed does not wait", () => {
+  test("a set whose notes changed or that got a skill does not wait", () => {
     const published = skill("a");
     const editions = [edition(1, "2026-10-02T09:00:00.000Z", published)];
-    assert.equal(widgetSummary([{ ...published, notes: "more", score: 5 }], editions).pending, 0);
+    const skills = [{ id: "s", name: "S", description: "", notes: "", addedAt: "2026-10-01T00:00:00.000Z", score: 5 }];
+    assert.equal(widgetSummary([{ ...published, notes: "more", skills }], editions).pending, 0);
   });
 });

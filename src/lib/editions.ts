@@ -1,21 +1,36 @@
 // The editions: numbered, dated and frozen snapshots of the Library, published with an introduction. An edition is never
 // changed once published; the changes of the skills are computed against the last one (changes.ts).
 
-import { changesSince, lastEdition, type Change, type ComparedEdition } from "./changes.ts";
+import { changesSince, hasSkillChanges, lastEdition, type Change, type ComparedEdition, type SkillChanges } from "./changes.ts";
 import type { RadarEntry } from "./radar.ts";
-import { DEFAULT_QUADRANTS, integerBetween, record, RINGS, text, type Ring, type Settings, type Skill } from "./skills.ts";
+import { legacySkillId } from "./migration.ts";
+import { DEFAULT_QUADRANTS, integerBetween, record, RINGS, text, type Ring, type Settings, type SkillSet } from "./skills.ts";
 
-/** A skill as an edition froze it. Its shape extends the radar's, so that the radar of an edition draws its entries as they are. */
+/** A skill of a set as an edition froze it. */
+export interface EditionSkill {
+  id: string;
+  name: string;
+  sourceUrl?: string;
+  description: string;
+  /** 1 to 5; absent when the skill was not evaluated. */
+  score?: number;
+  notes: string;
+}
+
+/** A set as an edition froze it. Its shape extends the radar's, so that the radar of an edition draws its entries as they are. */
 export interface EditionEntry extends RadarEntry {
   sourceUrl?: string;
   description: string;
-  score: number;
   notes: string;
-  /** Why it moved, for a moved skill. */
+  /** Why it moved, for a moved set. */
   moveReason?: string;
+  /** Its skills, in order. */
+  skills: EditionSkill[];
+  /** What changed among its skills, for a moved or updated set when something can be named. */
+  skillChanges?: SkillChanges;
 }
 
-/** A skill the edition took off the radar, since it was archived after the edition before. */
+/** A set the edition took off the radar, since it was archived after the edition before. */
 export interface RetiredEntry {
   id: string;
   name: string;
@@ -31,7 +46,7 @@ export interface Edition {
   intro: string;
   /** The names of the quadrants when it was published. */
   quadrants: Settings["quadrants"];
-  /** A skill per skill not archived. */
+  /** A set per set not archived. */
   entries: EditionEntry[];
   retired: RetiredEntry[];
 }
@@ -40,47 +55,47 @@ export interface Edition {
 export interface EditionSummary {
   number: number;
   publishedAt: string;
-  /** How many skills it published in each ring. */
+  /** How many sets it published in each ring. */
   counts: Record<Ring, number>;
 }
 
 export { REASON_MAX } from "./skills.ts";
 
-/** The ring the skill `id` was published in by the last edition (the one with the highest number); undefined when it is in none. */
+/** The ring the set `id` was published in by the last edition (the one with the highest number); undefined when it is in none. */
 export function publishedRing(id: string, editions: readonly ComparedEdition[]): Ring | undefined {
   return lastEdition(editions)?.entries.find((entry) => entry.id === id)?.ring;
 }
 
-/** The skills, not archived, that moved since the last edition and have no explanation yet; in their order. */
-export function missingReasons(skills: readonly Skill[], editions: readonly ComparedEdition[]): Skill[] {
-  const changes = changesSince(skills, editions);
-  return skills.filter((skill) => !skill.archived && changes.get(skill.id)?.kind === "moved" && !skill.moveReason?.trim());
+/** The sets, not archived, that moved since the last edition and have no explanation yet; in their order. */
+export function missingReasons(sets: readonly SkillSet[], editions: readonly ComparedEdition[]): SkillSet[] {
+  const changes = changesSince(sets, editions);
+  return sets.filter((set) => !set.archived && changes.get(set.id)?.kind === "moved" && !set.moveReason?.trim());
 }
 
 /**
- * Publishes the next edition of the skills at the date `now`, with the names of the quadrants and the introduction (which
- * is trimmed and required). It is refused, with nothing published, while a moved skill has no explanation. The skills it
+ * Publishes the next edition of the sets at the date `now`, with the names of the quadrants and the introduction (which
+ * is trimmed and required). It is refused, with nothing published, while a moved set has no explanation. The sets it
  * answers are the ones given without any explanation of a move, the others being the same objects.
  */
 export function publishEdition(
-  skills: readonly Skill[],
+  sets: readonly SkillSet[],
   quadrants: Settings["quadrants"],
   editions: readonly Edition[],
   intro: string,
   now: Date,
-): { edition: Edition; summary: EditionSummary; skills: Skill[] } | { error: "intro_required" } | { error: "reasons_missing"; missing: Skill[] } {
+): { edition: Edition; summary: EditionSummary; sets: SkillSet[] } | { error: "intro_required" } | { error: "reasons_missing"; missing: SkillSet[] } {
   const trimmed = intro.trim();
   if (!trimmed) return { error: "intro_required" };
-  const missing = missingReasons(skills, editions);
+  const missing = missingReasons(sets, editions);
   if (missing.length > 0) return { error: "reasons_missing", missing };
-  const changes = changesSince(skills, editions);
+  const changes = changesSince(sets, editions);
   const entries: EditionEntry[] = [];
   const retired: RetiredEntry[] = [];
-  for (const skill of skills) {
-    const change = changes.get(skill.id);
-    if (change?.kind === "retired") retired.push({ id: skill.id, name: skill.name, previousRing: change.previousRing });
-    if (skill.archived || !change || change.kind === "retired") continue;
-    entries.push(entryOf(skill, change));
+  for (const set of sets) {
+    const change = changes.get(set.id);
+    if (change?.kind === "retired") retired.push({ id: set.id, name: set.name, previousRing: change.previousRing });
+    if (set.archived || !change || change.kind === "retired") continue;
+    entries.push(entryOf(set, change));
   }
   const edition: Edition = {
     number: nextNumber(editions),
@@ -90,38 +105,49 @@ export function publishEdition(
     entries,
     retired,
   };
-  return { edition, summary: summaryOf(edition), skills: withoutReasons(skills) };
+  return { edition, summary: summaryOf(edition), sets: withoutReasons(sets) };
 }
 
 /** The number the next edition will have: 1 when there is none. */
 export const nextNumber = (editions: readonly { number: number }[]) => (lastEdition(editions)?.number ?? 0) + 1;
 
-/** The skills without any explanation of a move, which a publication answers; the others are the same objects. */
-export function withoutReasons(skills: readonly Skill[]): Skill[] {
-  return skills.map((skill) => {
-    if (skill.moveReason === undefined) return skill;
-    const { moveReason: _published, ...rest } = skill;
+/** The sets without any explanation of a move, which a publication answers; the others are the same objects. */
+export function withoutReasons(sets: readonly SkillSet[]): SkillSet[] {
+  return sets.map((set) => {
+    if (set.moveReason === undefined) return set;
+    const { moveReason: _published, ...rest } = set;
     return rest;
   });
 }
 
-function entryOf(skill: Skill, change: Change): EditionEntry {
+function entryOf(set: SkillSet, change: Change): EditionEntry {
   const moved = change.kind === "moved";
-  const reason = skill.moveReason?.trim();
+  const reason = set.moveReason?.trim();
+  const skillChanges = change.kind === "moved" || change.kind === "updated" ? change.skills : undefined;
   return {
-    id: skill.id,
-    name: skill.name,
-    ...(skill.sourceUrl ? { sourceUrl: skill.sourceUrl } : {}),
-    description: skill.description,
-    quadrant: skill.quadrant,
-    ring: skill.ring,
-    score: skill.score,
-    notes: skill.notes,
+    id: set.id,
+    name: set.name,
+    ...(set.sourceUrl ? { sourceUrl: set.sourceUrl } : {}),
+    description: set.description,
+    quadrant: set.quadrant,
+    ring: set.ring,
+    notes: set.notes,
+    skills: set.skills.map(frozenSkill),
     change: change.kind === "retired" ? "unchanged" : change.kind,
     ...(moved ? { previousRing: change.previousRing } : {}),
     ...(moved && reason ? { moveReason: reason } : {}),
+    ...(skillChanges && hasSkillChanges(skillChanges) ? { skillChanges } : {}),
   };
 }
+
+const frozenSkill = (skill: SkillSet["skills"][number]): EditionSkill => ({
+  id: skill.id,
+  name: skill.name,
+  ...(skill.sourceUrl ? { sourceUrl: skill.sourceUrl } : {}),
+  description: skill.description,
+  ...(skill.score !== undefined ? { score: skill.score } : {}),
+  notes: skill.notes,
+});
 
 /** What the index keeps of an edition: its number, its date and how many skills it published in each ring. */
 export function summaryOf(edition: Edition): EditionSummary {
@@ -175,19 +201,70 @@ function readEntry(stored: unknown): EditionEntry | null {
   const sourceUrl = text(value.sourceUrl);
   const previousRing = RINGS.find((ring) => ring === value.previousRing);
   const moveReason = text(value.moveReason);
+  const skillChanges = readSkillChanges(value.skillChanges);
+  // The old form (an entry was one skill) has no list of skills: it becomes a set of one skill with the id the migrated Library gives.
+  const old = !Array.isArray(value.skills);
+  const description = text(value.description) ?? "";
+  return {
+    id,
+    name,
+    ...(sourceUrl ? { sourceUrl } : {}),
+    description,
+    quadrant: integerBetween(value.quadrant, 0, 3) ?? 0,
+    ring: RINGS.find((ring) => ring === value.ring) ?? "watch",
+    notes: old ? "" : (text(value.notes) ?? ""),
+    skills: old
+      ? [{ id: legacySkillId(id), name, ...(sourceUrl ? { sourceUrl } : {}), description, score: integerBetween(value.score, 1, 5) ?? 3, notes: text(value.notes) ?? "" }]
+      : readAll(value.skills, readSkill),
+    change: CHANGES.find((change) => change === value.change) ?? "unchanged",
+    ...(previousRing ? { previousRing } : {}),
+    ...(moveReason ? { moveReason } : {}),
+    ...(skillChanges && hasSkillChanges(skillChanges) ? { skillChanges } : {}),
+  };
+}
+
+function readSkill(stored: unknown): EditionSkill | null {
+  const value = record(stored);
+  const id = text(value.id);
+  const name = text(value.name);
+  if (!id || !name) return null;
+  const sourceUrl = text(value.sourceUrl);
+  const score = integerBetween(value.score, 1, 5);
   return {
     id,
     name,
     ...(sourceUrl ? { sourceUrl } : {}),
     description: text(value.description) ?? "",
-    quadrant: integerBetween(value.quadrant, 0, 3) ?? 0,
-    ring: RINGS.find((ring) => ring === value.ring) ?? "watch",
-    score: integerBetween(value.score, 1, 5) ?? 3,
+    ...(score !== undefined ? { score } : {}),
     notes: text(value.notes) ?? "",
-    change: CHANGES.find((change) => change === value.change) ?? "unchanged",
-    ...(previousRing ? { previousRing } : {}),
-    ...(moveReason ? { moveReason } : {}),
   };
+}
+
+/** The changes among the skills of a stored entry; undefined when there are none stored. */
+function readSkillChanges(stored: unknown): SkillChanges | undefined {
+  if (stored === undefined || stored === null) return undefined;
+  const value = record(stored);
+  const named = (list: unknown) => {
+    const items: { id: string; name: string }[] = [];
+    for (const item of Array.isArray(list) ? list : []) {
+      const entry = record(item);
+      const id = text(entry.id);
+      const name = text(entry.name);
+      if (id && name) items.push({ id, name });
+    }
+    return items;
+  };
+  const scores: SkillChanges["scores"] = [];
+  for (const item of Array.isArray(value.scores) ? value.scores : []) {
+    const entry = record(item);
+    const id = text(entry.id);
+    const name = text(entry.name);
+    if (!id || !name) continue;
+    const before = integerBetween(entry.before, 1, 5);
+    const after = integerBetween(entry.after, 1, 5);
+    scores.push({ id, name, ...(before !== undefined ? { before } : {}), ...(after !== undefined ? { after } : {}) });
+  }
+  return { added: named(value.added), removed: named(value.removed), scores };
 }
 
 function readRetired(stored: unknown): RetiredEntry | null {

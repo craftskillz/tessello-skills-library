@@ -1,26 +1,41 @@
-// The skills and the settings of the View, as Svelte state shared by its parts, kept in the Host storage
+// The sets and the settings of the View, as Svelte state shared by its parts, kept in the Host storage
 // (lib/storage.ts). Each change is written at once, since the Host may unload the View without warning
-// (CONVENTION.md §4). Skills that could not be read cannot be changed, so that an empty list never overwrites them.
+// (CONVENTION.md §4). Sets that could not be read cannot be changed, so that an empty list never overwrites them.
 
 import type { ConnectedModule } from "@tessello/sdk";
 import { type Edition, publishEdition, publishedRing, summaryOf, withoutReasons } from "./editions.ts";
 import { addUnlessDuplicate, editUnlessDuplicate } from "./github.ts";
 import { t } from "./i18n.ts";
-import { DEFAULT_QUADRANTS, deleteSkill, type Draft, type Filters, renameQuadrant as renamed, type Settings, type Skill, type SkillEdit, type Tab } from "./skills.ts";
+import {
+  addSkillToSet,
+  DEFAULT_QUADRANTS,
+  deleteSet,
+  type Draft,
+  editSkillInSet,
+  type Filters,
+  removeSkillFromSet,
+  renameQuadrant as renamed,
+  type Settings,
+  type Skill,
+  type SkillEdit,
+  type SetEdit,
+  type SkillSet,
+  type Tab,
+} from "./skills.ts";
 import { reasonOf, type SkillStorage, skillStorage } from "./storage.ts";
 
-export const skills = $state<{ list: Skill[] }>({ list: [] });
+export const sets = $state<{ list: SkillSet[] }>({ list: [] });
 
 export const settings = $state<Settings>({ quadrants: [...DEFAULT_QUADRANTS], tab: "library", filters: { rings: [], quadrants: [], query: "", archived: false } });
 
 /**
- * The published editions, newest first, which decide what changed since the last one, and what can be deleted: a skill
+ * The published editions, newest first, which decide what changed since the last one, and what can be deleted: a set
  * that is in one is kept.
  */
 export const editions = $state<{ published: Edition[] }>({ published: [] });
 
 export const status = $state({
-  /** False until the skills are read, and again while they cannot be read. */
+  /** False until the sets are read, and again while they cannot be read. */
   loaded: false,
   loadError: "",
   /** Set when the last write failed: what is on screen is not saved. */
@@ -35,12 +50,12 @@ export function connectStore(host: ConnectedModule): void {
   storage = skillStorage(host.storage);
 }
 
-/** Reads the skills. A list whose last change could not be saved stays as it is on screen. */
+/** Reads the sets. A list whose last change could not be saved stays as it is on screen. */
 export async function load(): Promise<void> {
   try {
     const [stored, storedSettings, published] = await Promise.all([storage.read(), storage.readSettings(), storage.readEditions()]);
     if (!status.saveError) {
-      skills.list = stored;
+      sets.list = stored;
       Object.assign(settings, storedSettings);
     }
     editions.published = published;
@@ -54,7 +69,7 @@ export async function load(): Promise<void> {
 
 /** Writes the list now. A failure is shown to the User; the change stays on screen. */
 function save(): Promise<void> {
-  const list = $state.snapshot(skills.list);
+  const list = $state.snapshot(sets.list);
   return queue(() => storage.write(list));
 }
 
@@ -76,15 +91,42 @@ function queue(write: () => Promise<void>): Promise<void> {
 }
 
 /**
- * Adds a skill and saves it. When a skill, archived or not, comes from the same url, nothing is added and that skill is
- * returned. Null, with nothing changed, while the skills cannot be read or when the name is blank.
+ * Adds a set and saves it. When a set, archived or not, comes from the same url, nothing is added and that set is
+ * returned. Null, with nothing changed, while the sets cannot be read or when the name is blank.
  */
-export function add(draft: Draft): { added: Skill } | { duplicate: Skill } | null {
+export function addSet(draft: Draft): { added: SkillSet } | { duplicate: SkillSet } | null {
   if (!status.loaded) return null;
-  const result = addUnlessDuplicate(skills.list, draft, new Date(), crypto.randomUUID());
+  const result = addUnlessDuplicate(sets.list, draft, new Date(), crypto.randomUUID());
   if (!result) return null;
   if ("duplicate" in result) return result;
-  skills.list = result.skills;
+  sets.list = result.sets;
+  void save();
+  return { added: result.set };
+}
+
+/**
+ * Adds a set of one skill, which has the name, the url and the description of the draft (what pasting the url of a
+ * `SKILL.md` makes); the url of the set is the key of the duplicates. The answers are `addSet`'s.
+ */
+export function addSetOfOneSkill(draft: Draft): { added: SkillSet } | { duplicate: SkillSet } | null {
+  if (!status.loaded) return null;
+  const result = addUnlessDuplicate(sets.list, draft, new Date(), crypto.randomUUID());
+  if (!result) return null;
+  if ("duplicate" in result) return result;
+  const withSkill = addSkillToSet(result.sets, result.set.id, draft, new Date(), crypto.randomUUID());
+  if (!withSkill || "error" in withSkill) return null;
+  sets.list = withSkill.sets;
+  void save();
+  return { added: withSkill.set };
+}
+
+/** Adds a skill at the end of a set and saves it; the answer is `addSkillToSet`'s, null too while the sets cannot be read. */
+export function addSkill(setId: string, draft: Draft): { added: Skill } | { error: "url_taken"; duplicate: Skill } | null {
+  if (!status.loaded) return null;
+  const result = addSkillToSet(sets.list, setId, draft, new Date(), crypto.randomUUID());
+  if (!result) return null;
+  if ("error" in result) return result;
+  sets.list = result.sets;
   void save();
   return { added: result.skill };
 }
@@ -97,25 +139,46 @@ export function setTab(tab: Tab): void {
 }
 
 /**
- * Saves a change to a skill. The answer is `editUnlessDuplicate`'s, so that the View can tell the User why a change was
- * refused; null, with nothing changed, while the skills cannot be read or when there is no such skill.
+ * Saves a change to a set. The answer is `editUnlessDuplicate`'s, so that the View can tell the User why a change was
+ * refused; null, with nothing changed, while the sets cannot be read or when there is no such set.
  */
-export function edit(id: string, change: SkillEdit): ReturnType<typeof editUnlessDuplicate> {
+export function editSet(id: string, change: SetEdit): ReturnType<typeof editUnlessDuplicate> {
   if (!status.loaded) return null;
-  const result = editUnlessDuplicate(skills.list, id, change, new Date(), publishedRing(id, editions.published));
-  if (result && "skill" in result) {
-    skills.list = result.skills;
+  const result = editUnlessDuplicate(sets.list, id, change, new Date(), publishedRing(id, editions.published));
+  if (result && "set" in result) {
+    sets.list = result.sets;
     void save();
   }
   return result;
 }
 
-/** Deletes a skill and saves it; false, with nothing changed, while the skills cannot be read or when the skill cannot be deleted. */
+/** Saves a change to a skill of a set; the answer is `editSkillInSet`'s, null too while the sets cannot be read. */
+export function editSkill(setId: string, skillId: string, change: SkillEdit): ReturnType<typeof editSkillInSet> {
+  if (!status.loaded) return null;
+  const result = editSkillInSet(sets.list, setId, skillId, change, new Date());
+  if (result && "set" in result) {
+    sets.list = result.sets;
+    void save();
+  }
+  return result;
+}
+
+/** Takes a skill out of its set, even after a publication, and saves it; false, with nothing changed, when there is no such skill. */
+export function removeSkill(setId: string, skillId: string): boolean {
+  if (!status.loaded) return false;
+  const result = removeSkillFromSet(sets.list, setId, skillId, new Date());
+  if (!result) return false;
+  sets.list = result.sets;
+  void save();
+  return true;
+}
+
+/** Deletes a set and saves it; false, with nothing changed, while the sets cannot be read or when the set cannot be deleted. */
 export function remove(id: string): boolean {
   if (!status.loaded) return false;
-  const kept = deleteSkill(skills.list, id, editions.published);
+  const kept = deleteSet(sets.list, id, editions.published);
   if (!kept) return false;
-  skills.list = kept;
+  sets.list = kept;
   void save();
   return true;
 }
@@ -138,13 +201,13 @@ export function setFilters(filters: Filters): void {
 }
 
 /**
- * Publishes the next edition with the introduction `intro`: the edition is written, then the index, then the skills
- * without their explanations of a move. Nothing is published when the introduction is blank, when a moved skill is not
+ * Publishes the next edition with the introduction `intro`: the edition is written, then the index, then the sets
+ * without their explanations of a move. Nothing is published when the introduction is blank, when a moved set is not
  * explained (they are returned), or when the edition cannot be written (why, for the User, is returned).
  */
-export async function publish(intro: string): Promise<{ published: Edition } | { error: "intro_required" } | { missing: Skill[] } | { failed: string } | null> {
+export async function publish(intro: string): Promise<{ published: Edition } | { error: "intro_required" } | { missing: SkillSet[] } | { failed: string } | null> {
   if (!status.loaded) return null;
-  const result = publishEdition(skills.list, settings.quadrants, editions.published, intro, new Date());
+  const result = publishEdition(sets.list, settings.quadrants, editions.published, intro, new Date());
   if ("error" in result) return result.error === "reasons_missing" ? { missing: result.missing } : { error: result.error };
   const index = [result.summary, ...editions.published.map(summaryOf)];
   try {
@@ -156,8 +219,8 @@ export async function publish(intro: string): Promise<{ published: Edition } | {
     return { failed: quota ? t("publish_failed_quota") : t("publish_failed", { reason: reasonOf(cause) }) };
   }
   editions.published = [result.edition, ...editions.published];
-  // The skills as they are now, since the User may have changed one while the edition was written.
-  skills.list = withoutReasons(skills.list);
+  // The sets as they are now, since the User may have changed one while the edition was written.
+  sets.list = withoutReasons(sets.list);
   void save();
   return { published: result.edition };
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { addUnlessDuplicate, editUnlessDuplicate, defaultName, duplicateKey, fetchSkill, findDuplicate, parseSkillUrl, readSkillFrontmatter } from "../src/lib/github.ts";
-import type { Skill } from "../src/lib/skills.ts";
+import type { SkillSet } from "../src/lib/skills.ts";
 
 const tdd = {
   owner: "acme",
@@ -148,25 +148,25 @@ describe("the name a skill takes when its SKILL.md gives none", () => {
   });
 });
 
-const skill = (id: string, sourceUrl?: string, rest: Partial<Skill> = {}): Skill => ({
+const set = (id: string, sourceUrl?: string, rest: Partial<SkillSet> = {}): SkillSet => ({
   id,
-  name: `Skill ${id}`,
+  name: `Set ${id}`,
   ...(sourceUrl ? { sourceUrl } : {}),
   description: "",
   quadrant: 0,
   ring: "watch",
-  score: 3,
   notes: "",
+  skills: [],
   addedAt: "2026-10-01T00:00:00.000Z",
   updatedAt: "2026-10-01T00:00:00.000Z",
   archived: false,
   ...rest,
 });
 
-describe("telling a skill is already in the Library", () => {
+describe("telling a set is already in the Library", () => {
   const FOLDER = "https://github.com/acme/skills/tree/main/tdd";
 
-  test("the file, the folder and the raw URL of a skill share one key, whatever the case of the owner and the repo", () => {
+  test("the file, the folder and the raw URL of a set share one key, whatever the case of the owner and the repo", () => {
     for (const url of [
       FOLDER,
       `${FOLDER}/`,
@@ -192,33 +192,33 @@ describe("telling a skill is already in the Library", () => {
     assert.equal(duplicateKey("   "), null);
   });
 
-  test("the duplicate is the skill with the same key, archived or not", () => {
-    const archived = skill("b", "https://github.com/Acme/Skills/blob/main/tdd/SKILL.md", { archived: true });
-    const list = [skill("a", "https://example.com"), archived, skill("c")];
+  test("the duplicate is the set with the same key, archived or not", () => {
+    const archived = set("b", "https://github.com/Acme/Skills/blob/main/tdd/SKILL.md", { archived: true });
+    const list = [set("a", "https://example.com"), archived, set("c")];
     assert.equal(findDuplicate(list, "https://raw.githubusercontent.com/acme/skills/main/tdd/SKILL.md"), archived);
     assert.equal(findDuplicate(list, "https://example.com/"), list[0]);
   });
 
-  test("a skill added by hand without a url is never a duplicate", () => {
-    const list = [skill("a"), skill("b", "https://example.com")];
+  test("a set added by hand without a url is never a duplicate", () => {
+    const list = [set("a"), set("b", "https://example.com")];
     assert.equal(findDuplicate(list, undefined), undefined);
     assert.equal(findDuplicate(list, ""), undefined);
     assert.equal(findDuplicate(list, "https://example.com/other"), undefined);
   });
 });
 
-describe("adding a skill that may be there already", () => {
+describe("adding a set that may be there already", () => {
   const now = new Date("2026-10-22T10:00:00Z");
 
   test("a new url is added first", () => {
-    const list = [skill("a", "https://example.com")];
+    const list = [set("a", "https://example.com")];
     const result = addUnlessDuplicate(list, { name: "TDD", url: "https://github.com/acme/skills/tree/main/tdd" }, now, "b");
-    assert.ok(result && "skill" in result);
-    assert.deepEqual(result.skills.map((item) => item.id), ["b", "a"]);
+    assert.ok(result && "set" in result);
+    assert.deepEqual(result.sets.map((item) => item.id), ["b", "a"]);
   });
 
-  test("a url that is there already, archived or not, adds nothing and gives the skill that has it", () => {
-    const archived = skill("a", "https://github.com/Acme/Skills/blob/main/tdd/SKILL.md", { archived: true });
+  test("a url that is there already, archived or not, adds nothing and gives the set that has it", () => {
+    const archived = set("a", "https://github.com/Acme/Skills/blob/main/tdd/SKILL.md", { archived: true });
     const result = addUnlessDuplicate([archived], { name: "Again", url: "https://github.com/acme/skills/tree/main/tdd" }, now, "b");
     assert.deepEqual(result, { duplicate: archived });
   });
@@ -228,39 +228,39 @@ describe("adding a skill that may be there already", () => {
   });
 });
 
-describe("editing a skill that may take the url of another", () => {
+describe("editing a set that may take the url of another", () => {
   const now = new Date("2026-10-23T09:00:00Z");
-  const other = skill("b", "https://github.com/acme/skills/tree/main/tdd", { archived: true });
-  const list = [skill("a", "https://example.com"), other, skill("c")];
+  const other = set("b", "https://github.com/acme/skills/tree/main/tdd", { archived: true });
+  const list = [set("a", "https://example.com"), other, set("c")];
 
-  test("a url that another skill has, archived or not, saves nothing and gives that skill", () => {
+  test("a url that another set has, archived or not, saves nothing and gives that skill", () => {
     assert.deepEqual(editUnlessDuplicate(list, "a", { sourceUrl: "github.com/Acme/Skills/blob/main/tdd/SKILL.md", ring: "try" }, now), { duplicate: other });
   });
 
   test("a new url is saved", () => {
     const result = editUnlessDuplicate(list, "a", { sourceUrl: "https://example.com/new" }, now);
-    assert.ok(result && "skill" in result);
-    assert.equal(result.skill.sourceUrl, "https://example.com/new");
+    assert.ok(result && "set" in result);
+    assert.equal(result.set.sourceUrl, "https://example.com/new");
   });
 
-  test("a skill is never a duplicate of itself", () => {
+  test("a set is never a duplicate of itself", () => {
     const result = editUnlessDuplicate(list, "b", { sourceUrl: "https://raw.githubusercontent.com/acme/skills/main/tdd/SKILL.md", ring: "try" }, now);
-    assert.ok(result && "skill" in result);
-    assert.equal(result.skill.ring, "try");
+    assert.ok(result && "set" in result);
+    assert.equal(result.set.ring, "try");
   });
 
-  test("a blank url has no key, so it is no duplicate of the skills without a url", () => {
+  test("a blank url has no key, so it is no duplicate of the sets without a url", () => {
     const result = editUnlessDuplicate(list, "a", { sourceUrl: "  " }, now);
-    assert.ok(result && "skill" in result);
-    assert.equal("sourceUrl" in result.skill, false);
+    assert.ok(result && "set" in result);
+    assert.equal("sourceUrl" in result.set, false);
   });
 
   test("an edit without a url, an unknown id and the errors of the edit come through as they are", () => {
     assert.equal(editUnlessDuplicate(list, "zzz", { sourceUrl: "https://example.com" }, now), null);
     assert.deepEqual(editUnlessDuplicate(list, "a", { name: " " }, now), { error: "name_required" });
-    const result = editUnlessDuplicate(list, "a", { score: 5 }, now);
-    assert.ok(result && "skill" in result);
-    assert.equal(result.skill.score, 5);
+    const result = editUnlessDuplicate(list, "a", { notes: "n" }, now);
+    assert.ok(result && "set" in result);
+    assert.equal(result.set.notes, "n");
   });
 });
 

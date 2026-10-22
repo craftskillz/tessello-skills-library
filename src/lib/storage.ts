@@ -1,21 +1,26 @@
-// The skills in the Host storage (CONVENTION.md §6.1): the whole list under `skills`, and the settings of the View under
+// The sets in the Host storage (CONVENTION.md §6.1): the whole list under `sets` (the old `skills` are migrated once, never touched), and the settings of the View under
 // `settings`. What is stored is read defensively (skills.ts), and a failed write comes back as a message for the User.
 
 import type { Json, Storage } from "@tessello/sdk";
 import { readEdition, readEditionIndex, type Edition, type EditionSummary } from "./editions.ts";
 import { t } from "./i18n.ts";
-import { readSettings, readSkills, type Settings, type Skill } from "./skills.ts";
+import { migrateLegacySkills } from "./migration.ts";
+import { readSets, readSettings, type Settings, type SkillSet } from "./skills.ts";
 
-const SKILLS = "skills";
+const SETS = "sets";
+const LEGACY_SKILLS = "skills";
 const SETTINGS = "settings";
 const EDITIONS = "editions";
 const editionKey = (number: number) => `edition:${number}`;
 
 export interface SkillStorage {
-  /** The skills. Throws when the Host cannot read them. */
-  read(): Promise<Skill[]>;
-  /** Writes the skills. Throws an `Error` whose message tells the User what happened. */
-  write(skills: Skill[]): Promise<void>;
+  /**
+   * The sets. When `sets` was never written and the old `skills` hold a list, migrates it, writes `sets` and returns it
+   * (`skills` is left alone, and ignored from then on). Throws when the Host cannot read them.
+   */
+  read(): Promise<SkillSet[]>;
+  /** Writes the sets. Throws an `Error` whose message tells the User what happened. */
+  write(sets: SkillSet[]): Promise<void>;
   /** The settings. Throws when the Host cannot read them. */
   readSettings(): Promise<Settings>;
   /** Writes the settings. Throws as `write` does. */
@@ -31,8 +36,16 @@ export interface SkillStorage {
 
 export function skillStorage(storage: Storage): SkillStorage {
   return {
-    read: async () => readSkills(await storage.get(SKILLS)),
-    write: (skills) => set(storage, SKILLS, skills as unknown as Exclude<Json, null>),
+    read: async () => {
+      const stored = await storage.get(SETS);
+      if (stored !== null) return readSets(stored);
+      const legacy = await storage.get(LEGACY_SKILLS);
+      if (!Array.isArray(legacy)) return [];
+      const migrated = migrateLegacySkills(legacy);
+      await set(storage, SETS, migrated as unknown as Exclude<Json, null>);
+      return migrated;
+    },
+    write: (sets) => set(storage, SETS, sets as unknown as Exclude<Json, null>),
     readSettings: async () => readSettings(await storage.get(SETTINGS)),
     writeSettings: (settings) => set(storage, SETTINGS, settings as unknown as Exclude<Json, null>),
     readEditions: async () => {

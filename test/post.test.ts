@@ -2,17 +2,19 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import matter from "gray-matter";
 import { postSlug, renderPost } from "../src/lib/post.ts";
-import type { Edition, EditionEntry } from "../src/lib/editions.ts";
+import type { Edition, EditionEntry, EditionSkill } from "../src/lib/editions.ts";
+
+const skill = (id: string, rest: Partial<EditionSkill> = {}): EditionSkill => ({ id, name: `Skill ${id}`, description: "", notes: "", ...rest });
 
 const entry = (id: string, rest: Partial<EditionEntry> = {}): EditionEntry => ({
   id,
-  name: `Skill ${id}`,
+  name: `Set ${id}`,
   quadrant: 0,
   ring: "watch",
   change: "new",
   description: "",
-  score: 3,
   notes: "",
+  skills: [],
   ...rest,
 });
 
@@ -88,17 +90,24 @@ describe("the radar", () => {
 });
 
 describe("what moves", () => {
-  test("gives every skill of the first edition its full card, with stars and a badge", () => {
+  test("gives every set of the first edition its full card, with a badge and no stars", () => {
     const body = bodyOf(
-      edition({ number: 1 }, entry("a", { name: "Alpha", ring: "recommended", score: 3, description: "About alpha.", sourceUrl: "https://a.dev" }), entry("b", { name: "Beta", ring: "try", score: 5 })),
+      edition({ number: 1 }, entry("a", { name: "Alpha", ring: "recommended", description: "About alpha.", sourceUrl: "https://a.dev" }), entry("b", { name: "Beta", ring: "try" })),
     );
     const moves = body.slice(body.indexOf("## Ce qui bouge"));
-    assert.ok(moves.includes("### 1. Alpha ★★★☆☆"));
-    assert.ok(moves.includes("### 2. Beta ★★★★★"));
+    assert.ok(moves.includes("\n### 1. Alpha\n"));
+    assert.ok(moves.includes("\n### 2. Beta\n"));
     assert.ok(moves.includes("*Nouveau*"));
     assert.ok(moves.includes("About alpha."));
     assert.ok(moves.includes("[https://a.dev](https://a.dev)"));
     assert.ok(!body.includes("## Le reste du radar"));
+  });
+
+  test("lists the skills of a set under its card, linked when they have a source, with their stars or a note that they are not rated yet", () => {
+    const body = bodyOf(
+      edition({}, entry("a", { skills: [skill("s1", { name: "Linked", sourceUrl: "https://s.dev", score: 4 }), skill("s2", { name: "Plain" })] })),
+    );
+    assert.ok(body.includes("- [Linked](https://s.dev) ★★★★☆\n- Plain *Pas encore évaluée*"));
   });
 
   test("groups the cards by ring, from the centre outwards", () => {
@@ -135,26 +144,26 @@ describe("what moves", () => {
 });
 
 describe("the rest of the radar", () => {
-  test("lists the unchanged and updated skills compactly, by ring", () => {
+  test("lists the unchanged and updated sets compactly, by ring, with their number of skills", () => {
     const body = bodyOf(
       edition(
         {},
-        entry("a", { name: "Alpha", ring: "recommended", change: "unchanged", score: 4, sourceUrl: "https://a.dev" }),
-        entry("b", { name: "Beta", ring: "recommended", change: "updated", score: 2 }),
+        entry("a", { name: "Alpha", ring: "recommended", change: "unchanged", sourceUrl: "https://a.dev", skills: [skill("1"), skill("2")] }),
+        entry("b", { name: "Beta", ring: "recommended", change: "updated", skills: [skill("3")] }),
       ),
     );
     const rest = body.slice(body.indexOf("## Le reste du radar"));
-    assert.ok(rest.includes("- **1.** [Alpha](https://a.dev) ★★★★☆"));
-    assert.ok(rest.includes("- **2.** Beta ★★☆☆☆ — *mise à jour*"));
+    assert.ok(rest.includes("- **1.** [Alpha](https://a.dev) (2 skills)"));
+    assert.ok(rest.includes("- **2.** Beta (1 skill) — *mise à jour*"));
     assert.ok(!body.includes("## Ce qui bouge"));
   });
 });
 
-describe("the retired skills and the footnote", () => {
-  test("lists the retired skills with the ring they left, only when there are some", () => {
-    assert.ok(!bodyOf(edition()).includes("## Retirées du radar"));
+describe("the retired sets and the footnote", () => {
+  test("lists the retired sets with the ring they left, only when there are some", () => {
+    assert.ok(!bodyOf(edition()).includes("## Retirés du radar"));
     const body = bodyOf(edition({ retired: [{ id: "x", name: "Old", previousRing: "deprecated" }] }));
-    assert.ok(body.includes("## Retirées du radar"));
+    assert.ok(body.includes("## Retirés du radar"));
     assert.ok(body.includes("- Old — Déconseillé"));
   });
 

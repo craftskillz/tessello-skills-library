@@ -1,4 +1,4 @@
-// The View: the tabs of the Module, and the Library of the skills kept.
+// The View: the tabs of the Module, and the Library of the sets kept.
 
 import { connect } from "@tessello/sdk";
 import { mount } from "svelte";

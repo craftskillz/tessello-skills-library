@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import type { Json, Storage } from "@tessello/sdk";
 import type { Edition, EditionSummary } from "../src/lib/editions.ts";
 import { t } from "../src/lib/i18n.ts";
+import { migrateLegacySkills } from "../src/lib/migration.ts";
 import { skillStorage } from "../src/lib/storage.ts";
 
 /** A Host storage in memory, that fails the keys it is told to with a quota error, and records its calls. */
@@ -84,5 +85,54 @@ describe("the editions in the storage", () => {
     await skills.writeEdition(edition(2), [summary(2), summary(1)]);
     await storage.delete("edition:2");
     assert.deepEqual(await skills.readEditions(), [edition(1)]);
+  });
+});
+
+describe("the library in the storage", () => {
+  const legacy = [
+    { id: "a", name: "Alpha", description: "d", quadrant: 1, ring: "try", score: 4, notes: "n", addedAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-02T00:00:00.000Z", archived: false },
+  ];
+
+  test("a library written is read back from the key sets", async () => {
+    const { storage, values } = fakeStorage();
+    const skills = skillStorage(storage);
+    const [set] = migrateLegacySkills(legacy);
+    await skills.write([set]);
+    assert.ok(values.has("sets"));
+    assert.deepEqual(await skills.read(), [set]);
+  });
+
+  test("with no sets, the old skills are migrated into sets of one skill, and sets is written", async () => {
+    const { storage, values } = fakeStorage();
+    await storage.set("skills", legacy as unknown as Exclude<Json, null>);
+    const read = await skillStorage(storage).read();
+    assert.equal(read.length, 1);
+    assert.equal(read[0].id, "a");
+    assert.equal(read[0].skills[0].score, 4);
+    assert.deepEqual(values.get("sets"), read as unknown as Json);
+  });
+
+  test("the old skills are never written nor deleted", async () => {
+    const { storage, values, sets } = fakeStorage();
+    await storage.set("skills", legacy as unknown as Exclude<Json, null>);
+    sets.length = 0;
+    await skillStorage(storage).read();
+    assert.deepEqual(sets, ["sets"]);
+    assert.deepEqual(values.get("skills"), legacy as unknown as Json);
+  });
+
+  test("once sets exists, the old skills are ignored", async () => {
+    const { storage } = fakeStorage();
+    await storage.set("skills", legacy as unknown as Exclude<Json, null>);
+    const skills = skillStorage(storage);
+    await skills.read();
+    await skills.write([]);
+    assert.deepEqual(await skills.read(), []);
+  });
+
+  test("with nothing stored, the library is empty and nothing is written", async () => {
+    const { storage, sets } = fakeStorage();
+    assert.deepEqual(await skillStorage(storage).read(), []);
+    assert.deepEqual(sets, []);
   });
 });

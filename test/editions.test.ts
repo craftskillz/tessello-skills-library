@@ -1,16 +1,27 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { changesSince } from "../src/lib/changes.ts";
 import { missingReasons, publishedRing, publishEdition, readEdition, readEditionIndex, summaryOf, type Edition } from "../src/lib/editions.ts";
-import { DEFAULT_QUADRANTS, type Skill } from "../src/lib/skills.ts";
+import { legacySkillId, migrateLegacySkills } from "../src/lib/migration.ts";
+import { DEFAULT_QUADRANTS, type Skill, type SkillSet } from "../src/lib/skills.ts";
 
-const skill = (id: string, rest: Partial<Skill> = {}): Skill => ({
+const member = (id: string, rest: Partial<Skill> = {}): Skill => ({
   id,
   name: `Skill ${id}`,
   description: "",
+  notes: "",
+  addedAt: "2026-10-01T00:00:00.000Z",
+  ...rest,
+});
+
+const skill = (id: string, rest: Partial<SkillSet> = {}): SkillSet => ({
+  id,
+  name: `Set ${id}`,
+  description: "",
   quadrant: 0,
   ring: "watch",
-  score: 3,
   notes: "",
+  skills: [],
   addedAt: "2026-10-01T00:00:00.000Z",
   updatedAt: "2026-10-01T00:00:00.000Z",
   archived: false,
@@ -22,7 +33,7 @@ const edition = (number: number, ...entries: Partial<Edition["entries"][number]>
   publishedAt: "2026-10-10T00:00:00.000Z",
   intro: "Hello",
   quadrants: ["A", "B", "C", "D"],
-  entries: entries.map((entry) => ({ id: "a", name: "Skill a", quadrant: 0, ring: "watch", change: "new", description: "", score: 3, notes: "", ...entry })),
+  entries: entries.map((entry) => ({ id: "a", name: "Set a", quadrant: 0, ring: "watch", change: "new", description: "", notes: "", skills: [], ...entry })),
   retired: [],
 });
 
@@ -73,9 +84,19 @@ describe("publishing an edition", () => {
     assert.deepEqual(publishEdition([skill("a")], quadrants, [], "  \n", now), { error: "intro_required" });
   });
 
-  test("an entry freezes a skill that is not archived, with its change", () => {
+  test("an entry freezes a set that is not archived with its skills, and its change", () => {
     const result = publishEdition(
-      [skill("a", { name: "TDD", sourceUrl: "https://x.test/a", description: "d", quadrant: 2, ring: "try", score: 4, notes: "n" })],
+      [
+        skill("a", {
+          name: "TDD",
+          sourceUrl: "https://x.test/a",
+          description: "d",
+          quadrant: 2,
+          ring: "try",
+          notes: "n",
+          skills: [member("s1", { name: "Red", sourceUrl: "https://x.test/s1", description: "sd", score: 4, notes: "sn" }), member("s2")],
+        }),
+      ],
       quadrants,
       [],
       "Intro",
@@ -83,7 +104,20 @@ describe("publishing an edition", () => {
     );
     assert.ok("edition" in result);
     assert.deepEqual(result.edition.entries, [
-      { id: "a", name: "TDD", sourceUrl: "https://x.test/a", description: "d", quadrant: 2, ring: "try", score: 4, notes: "n", change: "new" },
+      {
+        id: "a",
+        name: "TDD",
+        sourceUrl: "https://x.test/a",
+        description: "d",
+        quadrant: 2,
+        ring: "try",
+        notes: "n",
+        change: "new",
+        skills: [
+          { id: "s1", name: "Red", sourceUrl: "https://x.test/s1", description: "sd", score: 4, notes: "sn" },
+          { id: "s2", name: "Skill s2", description: "", notes: "" },
+        ],
+      },
     ]);
   });
 
@@ -92,14 +126,37 @@ describe("publishing an edition", () => {
     assert.ok("edition" in result);
     assert.equal(result.edition.number, 4);
     assert.equal(result.edition.entries[0].change, "unchanged");
+    assert.equal("skillChanges" in result.edition.entries[0], false);
   });
 
   test("a moved skill keeps its previous ring and its trimmed reason", () => {
     const result = publishEdition([skill("a", { ring: "recommended", moveReason: " Proven " })], quadrants, [edition(1, { id: "a" })], "Intro", now);
     assert.ok("edition" in result);
     assert.deepEqual(result.edition.entries[0], {
-      id: "a", name: "Skill a", description: "", quadrant: 0, ring: "recommended", score: 3, notes: "", change: "moved", previousRing: "watch", moveReason: "Proven",
+      id: "a", name: "Set a", description: "", quadrant: 0, ring: "recommended", notes: "", skills: [], change: "moved", previousRing: "watch", moveReason: "Proven",
     });
+  });
+
+  test("a moved set carries what changed among its skills, and an updated one too, but not an unchanged one", () => {
+    const sets = [
+      skill("m", { ring: "try", moveReason: "Why", skills: [member("s1", { score: 5 })] }),
+      skill("u", { skills: [member("s2")] }),
+      skill("n", { notes: "same" }),
+    ];
+    const published = edition(1, { id: "m", skills: [{ id: "s1", name: "Skill s1", description: "", notes: "" }] }, { id: "u" }, { id: "n", notes: "same" });
+    const result = publishEdition(sets, quadrants, [published], "Intro", now);
+    assert.ok("edition" in result);
+    const [moved, updated, unchanged] = result.edition.entries;
+    assert.deepEqual(moved.skillChanges, { added: [], removed: [], scores: [{ id: "s1", name: "Skill s1", after: 5 }] });
+    assert.equal(updated.change, "updated");
+    assert.deepEqual(updated.skillChanges, { added: [{ id: "s2", name: "Skill s2" }], removed: [], scores: [] });
+    assert.equal("skillChanges" in unchanged, false);
+  });
+
+  test("a moved set whose skills did not change has no skill changes", () => {
+    const result = publishEdition([skill("a", { ring: "try", moveReason: "Why" })], quadrants, [edition(1, { id: "a" })], "Intro", now);
+    assert.ok("edition" in result);
+    assert.equal("skillChanges" in result.edition.entries[0], false);
   });
 
   test("a moved skill with no reason stops the publication, naming the skills", () => {
@@ -113,18 +170,18 @@ describe("publishing an edition", () => {
     const skills = [skill("a", { archived: true, ring: "try" }), skill("b", { archived: true }), skill("c")];
     const result = publishEdition(skills, quadrants, [edition(1, { id: "a", ring: "recommended" })], "Intro", now);
     assert.ok("edition" in result);
-    assert.deepEqual(result.edition.retired, [{ id: "a", name: "Skill a", previousRing: "recommended" }]);
+    assert.deepEqual(result.edition.retired, [{ id: "a", name: "Set a", previousRing: "recommended" }]);
     assert.deepEqual(result.edition.entries.map((entry) => entry.id), ["c"]);
   });
 
-  test("the reasons are cleared from all the skills, the others being the same objects, and the summary counts the rings", () => {
+  test("the reasons are cleared from all the skills, the others being the same objects, and the summary counts the sets per ring", () => {
     const skills = [skill("a", { ring: "try", moveReason: "Why" }), skill("b"), skill("c", { ring: "try" })];
     const result = publishEdition(skills, quadrants, [edition(1, { id: "a" }, { id: "b" }, { id: "c", ring: "try" })], "Intro", now);
     assert.ok("edition" in result);
-    assert.equal("moveReason" in result.skills[0], false);
-    assert.equal(result.skills[0].ring, "try");
-    assert.equal(result.skills[1], skills[1]);
-    assert.equal(result.skills[2], skills[2]);
+    assert.equal("moveReason" in result.sets[0], false);
+    assert.equal(result.sets[0].ring, "try");
+    assert.equal(result.sets[1], skills[1]);
+    assert.equal(result.sets[2], skills[2]);
     assert.deepEqual(result.summary, { number: 2, publishedAt: "2026-10-25T08:00:00.000Z", counts: { recommended: 0, try: 2, watch: 1, deprecated: 0 } });
   });
 });
@@ -153,14 +210,66 @@ describe("reading a stored edition", () => {
     const read = readEdition({
       number: 1,
       publishedAt: "2026-10-10T00:00:00Z",
-      entries: [null, { id: "a" }, { id: "b", name: "B", ring: "adopt", score: 9, quadrant: 7, change: "weird", previousRing: "nope" }, { id: "b", name: "Dup" }],
+      entries: [null, { id: "a" }, { id: "b", name: "B", ring: "adopt", skills: [null], quadrant: 7, change: "weird", previousRing: "nope" }, { id: "b", name: "Dup" }],
       retired: [{ id: "r" }, { id: "r", name: "R", previousRing: "try" }, { id: "s", name: "S", previousRing: "nope" }],
     });
     assert.ok(read);
     assert.equal(read.intro, "");
     assert.deepEqual(read.quadrants, DEFAULT_QUADRANTS);
-    assert.deepEqual(read.entries, [{ id: "b", name: "B", description: "", quadrant: 0, ring: "watch", score: 3, notes: "", change: "unchanged" }]);
+    assert.deepEqual(read.entries, [{ id: "b", name: "B", description: "", quadrant: 0, ring: "watch", notes: "", change: "unchanged", skills: [] }]);
     assert.deepEqual(read.retired, [{ id: "r", name: "R", previousRing: "try" }]);
+  });
+
+  test("the skills of an entry are read, the unreadable ones and the repeated ids skipped, the score kept only from 1 to 5", () => {
+    const read = readEdition({
+      number: 1,
+      publishedAt: "2026-10-10T00:00:00Z",
+      entries: [
+        {
+          id: "a",
+          name: "A",
+          skills: [null, { id: "s" }, { id: "s1", name: "S1", score: 9, notes: "n" }, { id: "s2", name: "S2", score: 2, sourceUrl: "https://x.test", description: "d" }, { id: "s2", name: "Dup" }],
+          skillChanges: { added: [{ id: "s2", name: "S2" }, { id: "x" }], removed: "no", scores: [{ id: "s1", name: "S1", before: 2, after: 9 }, { id: "s2", name: "S2", after: 4 }] },
+        },
+      ],
+    });
+    assert.deepEqual(read?.entries[0].skills, [
+      { id: "s1", name: "S1", description: "", notes: "n" },
+      { id: "s2", name: "S2", sourceUrl: "https://x.test", description: "d", score: 2, notes: "" },
+    ]);
+    assert.deepEqual(read?.entries[0].skillChanges, { added: [{ id: "s2", name: "S2" }], removed: [], scores: [{ id: "s1", name: "S1", before: 2 }, { id: "s2", name: "S2", after: 4 }] });
+  });
+
+  test("an edition in the old form is converted: each entry becomes a set of one skill that takes its score and notes", () => {
+    const read = readEdition({
+      number: 1,
+      publishedAt: "2026-10-10T00:00:00Z",
+      entries: [{ id: "old", name: "Old", sourceUrl: "https://x.test", description: "d", quadrant: 1, ring: "try", score: 4, notes: "kept", change: "new" }],
+    });
+    assert.deepEqual(read?.entries, [
+      {
+        id: "old",
+        name: "Old",
+        sourceUrl: "https://x.test",
+        description: "d",
+        quadrant: 1,
+        ring: "try",
+        notes: "",
+        change: "new",
+        skills: [{ id: legacySkillId("old"), name: "Old", sourceUrl: "https://x.test", description: "d", score: 4, notes: "kept" }],
+      },
+    ]);
+  });
+
+  test("a migrated Library compared to the converted old edition shows every set unchanged", () => {
+    const legacy = [
+      { id: "a", name: "A", sourceUrl: "https://x.test/a", description: "d", quadrant: 2, ring: "try", score: 4, notes: "n", addedAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-02T00:00:00.000Z", archived: false },
+      { id: "b", name: "B", description: "", quadrant: 0, ring: "watch", score: 3, notes: "", addedAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z", archived: false },
+    ];
+    const old = readEdition({ number: 1, publishedAt: "2026-10-10T00:00:00Z", entries: legacy.map(({ addedAt: _a, updatedAt: _u, archived: _r, ...entry }) => ({ ...entry, change: "new" })) });
+    assert.ok(old);
+    const changes = changesSince(migrateLegacySkills(legacy), [old]);
+    assert.deepEqual([...changes.values()], [{ kind: "unchanged" }, { kind: "unchanged" }]);
   });
 
   test("the names of the quadrants are read, each falling back to its default", () => {

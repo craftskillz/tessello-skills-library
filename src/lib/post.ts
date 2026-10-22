@@ -1,7 +1,7 @@
 // The blog post of an edition: the Markdown of a post of the craftskillz blog, with its frontmatter, its radar and its cards.
 // It is a pure function of the frozen edition, which already carries the change of each skill, so it is always the same.
 
-import type { Edition, EditionEntry } from "./editions.ts";
+import type { Edition, EditionEntry, EditionSkill } from "./editions.ts";
 import { numberEntries, renderRadar, type RadarLabels } from "./radar.ts";
 import { RINGS, type Ring } from "./skills.ts";
 
@@ -52,7 +52,7 @@ export function renderPost(edition: Edition): string {
   if (moved.length > 0) sections.push("## Ce qui bouge", ...byRing(moved, card));
   if (rest.length > 0) sections.push("## Le reste du radar", ...byRing(rest, compactList));
   if (edition.retired.length > 0) {
-    sections.push("## Retirées du radar", edition.retired.map((skill) => `- ${markdownText(skill.name)} — ${FRENCH_RINGS[skill.previousRing]}`).join("\n"));
+    sections.push("## Retirés du radar", edition.retired.map((skill) => `- ${markdownText(skill.name)} — ${FRENCH_RINGS[skill.previousRing]}`).join("\n"));
   }
   sections.push(`*${FOOTNOTE}*`);
   return `${frontmatter}\n\n${sections.join("\n\n")}\n`;
@@ -66,27 +66,34 @@ function byRing(entries: readonly Numbered[], render: (entries: Numbered[]) => s
   });
 }
 
-/** The full card of each skill: its heading, its badge, why it moved, what it is, where it comes from and its notes. */
+/** The full card of each set: its heading, its badge, why it moved, what it is, where it comes from, its notes and its skills. */
 function card(entries: Numbered[]): string {
   return entries
     .map((entry) => {
-      const parts = [`### ${entry.number}. ${markdownText(entry.name)} ${stars(entry.score)}`, `*${badge(entry)}*`];
+      const parts = [`### ${entry.number}. ${markdownText(entry.name)}`, `*${badge(entry)}*`];
       if (entry.moveReason) parts.push(entry.moveReason);
       if (entry.description.trim()) parts.push(entry.description.trim());
       if (entry.sourceUrl) parts.push(`[${markdownText(entry.sourceUrl)}](${destination(entry.sourceUrl)})`);
       if (entry.notes.trim()) parts.push(shiftNoteHeadings(entry.notes.trim()));
+      if (entry.skills.length > 0) parts.push(entry.skills.map(skillLine).join("\n"));
       return parts.join("\n\n");
     })
     .join("\n\n");
 }
 
-/** A line per skill: its number, its name, linked when it has a source, its stars, and whether it was updated. */
+/** A skill of a set: its name, linked when it has a source, and its stars, or that it is not rated yet. */
+function skillLine(skill: EditionSkill): string {
+  const name = markdownText(skill.name);
+  return `- ${skill.sourceUrl ? `[${name}](${destination(skill.sourceUrl)})` : name} ${skill.score === undefined ? "*Pas encore évaluée*" : stars(skill.score)}`;
+}
+
+/** A line per set: its number, its name, linked when it has a source, its number of skills, and whether it was updated. */
 function compactList(entries: Numbered[]): string {
   return entries
     .map((entry) => {
       const name = markdownText(entry.name);
       const title = entry.sourceUrl ? `[${name}](${destination(entry.sourceUrl)})` : name;
-      return `- **${entry.number}.** ${title} ${stars(entry.score)}${entry.change === "updated" ? " — *mise à jour*" : ""}`;
+      return `- **${entry.number}.** ${title} (${entry.skills.length} skill${entry.skills.length === 1 ? "" : "s"})${entry.change === "updated" ? " — *mise à jour*" : ""}`;
     })
     .join("\n");
 }
