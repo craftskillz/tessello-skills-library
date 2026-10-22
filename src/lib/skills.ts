@@ -72,14 +72,14 @@ export function addSkill(skills: readonly Skill[], draft: Draft, now: Date, id: 
 export const NOTES_MAX = 8000;
 
 /** What the User changes in a skill; what is not given stays as it is. */
-export type SkillEdit = Partial<Pick<Skill, "name" | "sourceUrl" | "description" | "quadrant" | "ring" | "score" | "notes">>;
+export type SkillEdit = Partial<Pick<Skill, "name" | "sourceUrl" | "description" | "quadrant" | "ring" | "score" | "notes" | "archived">>;
 
 /**
  * Saves a change to the skill `id` at the date `now`; null when there is no such skill. The name, the description and the
  * notes are kept as typed, since the User is still typing: the name and the description are only clipped, and a blank
  * name or notes that are too long are refused with nothing saved. A blank url removes the url. A quadrant, a ring or a
- * score that does not exist is ignored. The date changes only when a value does, and the other skills are the same
- * objects, in the same order.
+ * score that does not exist is ignored, and so is an archived that is not a boolean. The date changes only when a value
+ * does, and the other skills are the same objects, in the same order.
  */
 export function editSkill(
   skills: readonly Skill[],
@@ -98,6 +98,7 @@ export function editSkill(
   if (edit.quadrant !== undefined && integerBetween(edit.quadrant, 0, 3) !== undefined) changes.quadrant = edit.quadrant;
   if (edit.score !== undefined && integerBetween(edit.score, 1, 5) !== undefined) changes.score = edit.score;
   if (edit.ring !== undefined && RINGS.includes(edit.ring)) changes.ring = edit.ring;
+  if (typeof edit.archived === "boolean") changes.archived = edit.archived;
   const changed = (Object.keys(changes) as (keyof Skill)[]).some((key) => changes[key] !== current[key]);
   const url = edit.sourceUrl?.trim();
   const urlChanged = edit.sourceUrl !== undefined && (url || undefined) !== current.sourceUrl;
@@ -148,6 +149,22 @@ function readSkill(stored: unknown): Skill | null {
   };
 }
 
+/** What deleting needs to know of an edition: the skills it published. */
+export interface PublishedEdition {
+  entries: readonly { id: string }[];
+}
+
+/** Whether the skill `id` is in no edition, since an edition is kept as it was published. */
+export function canDelete(id: string, editions: readonly PublishedEdition[]): boolean {
+  return !editions.some((edition) => edition.entries.some((entry) => entry.id === id));
+}
+
+/** The skills without the skill `id`, the others the same objects in the same order; null when there is no such skill or it was published. */
+export function deleteSkill(skills: readonly Skill[], id: string, editions: readonly PublishedEdition[]): Skill[] | null {
+  if (!skills.some((skill) => skill.id === id) || !canDelete(id, editions)) return null;
+  return skills.filter((skill) => skill.id !== id);
+}
+
 /** The tabs of the View, in their order. */
 export const TABS = ["library", "radar", "editions"] as const;
 export type Tab = (typeof TABS)[number];
@@ -173,6 +190,8 @@ export interface Filters {
   quadrants: number[];
   /** A part of the name. */
   query: string;
+  /** Whether the archived skills are shown, greyed. */
+  archived: boolean;
 }
 
 /** The filters under the key `filters` of the settings; what cannot be read is no filtering. */
@@ -184,14 +203,16 @@ export function readFilters(stored: unknown): Filters {
     rings: RINGS.filter((ring) => rings.includes(ring)),
     quadrants: [...new Set(quadrants.filter((quadrant) => integerBetween(quadrant, 0, 3) !== undefined))],
     query: text(value.query) ?? "",
+    archived: value.archived === true,
   };
 }
 
-/** The skills that have one of the rings and one of the quadrants selected, and a name with the query in it; in their order. */
+/** The skills that have one of the rings and one of the quadrants selected, and a name with the query in it, the archived ones only when asked; in their order. */
 export function filterSkills(skills: readonly Skill[], filters: Filters): Skill[] {
   const query = plain(filters.query.trim());
   return skills.filter(
     (skill) =>
+      (filters.archived || !skill.archived) &&
       (filters.rings.length === 0 || filters.rings.includes(skill.ring)) &&
       (filters.quadrants.length === 0 || filters.quadrants.includes(skill.quadrant)) &&
       plain(skill.name).includes(query),

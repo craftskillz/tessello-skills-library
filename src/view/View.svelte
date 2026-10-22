@@ -2,7 +2,7 @@
   import { tick } from "svelte";
   import { fetchSkill, findDuplicate, parseSkillUrl } from "../lib/github.ts";
   import { t, type MessageKey } from "../lib/i18n.ts";
-  import { filterSkills, linkOf, newestFirst, type Ring, RINGS, type Skill, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX, QUADRANT_NAME_MAX } from "../lib/skills.ts";
+  import { type Filters, filterSkills, linkOf, newestFirst, type Ring, RINGS, type Skill, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX, QUADRANT_NAME_MAX } from "../lib/skills.ts";
   import { add, load, renameQuadrant, setFilters, setTab, settings, skills, status } from "../lib/store.svelte.ts";
   import EditPanel from "./EditPanel.svelte";
   import Modal from "./Modal.svelte";
@@ -25,9 +25,12 @@
   let highlighted = $state("");
   let highlightTimer: ReturnType<typeof setTimeout> | undefined;
 
-  /** Highlights the row of a skill a moment, and scrolls to it; filters that hide it are cleared. */
+  /** No filter on, with the archived skills shown or not. */
+  const cleared = (archived: boolean): Filters => ({ rings: [], quadrants: [], query: "", archived });
+
+  /** Highlights the row of a skill a moment, and scrolls to it; filters that hide it are cleared, and archived skills shown when it is one. */
   async function show(skill: Skill) {
-    if (!shown.some((item) => item.id === skill.id)) setFilters({ rings: [], quadrants: [], query: "" });
+    if (!shown.some((item) => item.id === skill.id)) setFilters(cleared(skill.archived || settings.filters.archived));
     highlighted = skill.id;
     clearTimeout(highlightTimer);
     highlightTimer = setTimeout(() => (highlighted = ""), 2000);
@@ -253,9 +256,13 @@
                 </button>
               {/each}
             </div>
+            <label class="sl-switch">
+              <input type="checkbox" checked={settings.filters.archived} onchange={(event) => setFilters({ ...settings.filters, archived: event.currentTarget.checked })} />
+              {t("show_archived")}
+            </label>
             {#if filtered}
               <div>
-                <button type="button" class="sl-btn" onclick={() => setFilters({ rings: [], quadrants: [], query: "" })}>{t("clear_filters")}</button>
+                <button type="button" class="sl-btn" onclick={() => setFilters(cleared(settings.filters.archived))}>{t("clear_filters")}</button>
               </div>
             {/if}
           </div>
@@ -265,7 +272,7 @@
             {#each shown as skill (skill.id)}
               {@const link = linkOf(skill)}
               <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-              <li class="sl-skill" class:sl-highlighted={highlighted === skill.id} data-skill-id={skill.id} onclick={(event) => onRowClick(event, skill)}>
+              <li class="sl-skill" class:sl-highlighted={highlighted === skill.id} class:sl-archived={skill.archived} data-skill-id={skill.id} onclick={(event) => onRowClick(event, skill)}>
                 <span class="sl-name">
                   {#if link}
                     <a href={link} target="_blank" rel="noopener">{skill.name}</a>
@@ -277,6 +284,7 @@
                 <span class="sl-ring sl-ring--{skill.ring}">{t(`ring_${skill.ring}` as MessageKey)}</span>
                 <span class="sl-stars" role="img" aria-label={t("stars", { score: skill.score })}>{stars(skill.score)}</span>
                 <span class="sl-quadrant">{settings.quadrants[skill.quadrant]}</span>
+                {#if skill.archived}<span class="sl-tag">{t("archived_tag")}</span>{/if}
               </li>
             {/each}
           </ul>
@@ -411,8 +419,25 @@
     border-color: var(--accent);
     color: #fff;
   }
+  .sl-switch {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
   .sl-skill {
     cursor: pointer;
+  }
+  /* An archived skill is shown, when asked, but set apart. */
+  .sl-archived {
+    opacity: 0.55;
+  }
+  .sl-tag {
+    font-size: 11px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted);
   }
   .sl-error {
     color: var(--red);

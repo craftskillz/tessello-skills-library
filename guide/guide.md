@@ -35,6 +35,12 @@ Each change is saved as you make it. Close the panel with **Close** or Escape. A
 - **Notes are limited to 8,000 characters.** Trim the notes.
 - **Another skill already has this URL.** Two skills cannot come from the same place.
 
+## Archiving and deleting a skill
+
+At the bottom of a skill's panel, **Archive** takes the skill off the **Library** without losing what you wrote about it. Archived skills are hidden unless you turn on **Show archived** above the list, where they appear greyed and tagged **Archived**; the page remembers the switch. **Unarchive** puts a skill back. An archived skill still counts for duplicates: adding its URL again shows it, with the switch turned on.
+
+**Delete** removes a skill for good, after you confirm. It only appears for a skill that is in no edition, so a skill you published is archived instead.
+
 ## Renaming the quadrants
 
 In the **Library**, click **Rename quadrants** and edit the four names (1 to 40 characters, required). A name is saved as soon as it is valid; a blank one shows **A quadrant name is required.** and is not saved. Renaming a quadrant moves no skill: each stays in its quadrant, under the new name.

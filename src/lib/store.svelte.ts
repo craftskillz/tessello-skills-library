@@ -5,12 +5,15 @@
 import type { ConnectedModule } from "@tessello/sdk";
 import { addUnlessDuplicate, editUnlessDuplicate } from "./github.ts";
 import { t } from "./i18n.ts";
-import { DEFAULT_QUADRANTS, type Draft, type Filters, renameQuadrant as renamed, type Settings, type Skill, type SkillEdit, type Tab } from "./skills.ts";
+import { DEFAULT_QUADRANTS, deleteSkill, type Draft, type Filters, type PublishedEdition, renameQuadrant as renamed, type Settings, type Skill, type SkillEdit, type Tab } from "./skills.ts";
 import { reasonOf, type SkillStorage, skillStorage } from "./storage.ts";
 
 export const skills = $state<{ list: Skill[] }>({ list: [] });
 
-export const settings = $state<Settings>({ quadrants: [...DEFAULT_QUADRANTS], tab: "library", filters: { rings: [], quadrants: [], query: "" } });
+export const settings = $state<Settings>({ quadrants: [...DEFAULT_QUADRANTS], tab: "library", filters: { rings: [], quadrants: [], query: "", archived: false } });
+
+/** The published editions, which decide what can be deleted: a skill that is in one is kept. */
+export const editions = $state<{ published: PublishedEdition[] }>({ published: [] });
 
 export const status = $state({
   /** False until the skills are read, and again while they cannot be read. */
@@ -100,6 +103,16 @@ export function edit(id: string, change: SkillEdit): ReturnType<typeof editUnles
     void save();
   }
   return result;
+}
+
+/** Deletes a skill and saves it; false, with nothing changed, while the skills cannot be read or when the skill cannot be deleted. */
+export function remove(id: string): boolean {
+  if (!status.loaded) return false;
+  const kept = deleteSkill(skills.list, id, editions.published);
+  if (!kept) return false;
+  skills.list = kept;
+  void save();
+  return true;
 }
 
 /** Renames a quadrant and saves it; false, with nothing changed, when the name is blank or too long. */

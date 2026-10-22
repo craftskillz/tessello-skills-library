@@ -2,8 +2,9 @@
   // The side panel where the User gives a verdict on a skill. Each change is saved at once; what is refused is said
   // under its field, and the field keeps what was typed.
   import { t, type MessageKey } from "../lib/i18n.ts";
-  import { DESCRIPTION_MAX, NAME_MAX, RINGS, type SkillEdit } from "../lib/skills.ts";
-  import { edit, settings, skills } from "../lib/store.svelte.ts";
+  import { canDelete, DESCRIPTION_MAX, NAME_MAX, RINGS, type SkillEdit } from "../lib/skills.ts";
+  import { edit, editions, remove, settings, skills } from "../lib/store.svelte.ts";
+  import Modal from "./Modal.svelte";
 
   let { id, onClose }: { id: string; onClose: () => void } = $props();
 
@@ -42,6 +43,14 @@
   function commitUrl() {
     if (url.trim() === savedUrl && !errors.url) return;
     refuse("url", save({ sourceUrl: url }));
+  }
+
+  /** Whether the dialog that asks to confirm a deletion is open. */
+  let confirming = $state(false);
+
+  function confirmDelete() {
+    confirming = false;
+    if (remove(id)) onClose();
   }
 
   function close() {
@@ -143,8 +152,24 @@
         ></textarea>
         {#if errors.notes}<span class="sl-error" role="alert">{errors.notes}</span>{/if}
       </label>
+      <div class="sl-panel-actions">
+        <button type="button" class="sl-btn" onclick={() => save({ archived: !skill.archived })}>
+          {skill.archived ? t("unarchive") : t("archive")}
+        </button>
+        {#if canDelete(id, editions.published)}
+          <button type="button" class="sl-btn sl-btn--danger" onclick={() => (confirming = true)}>{t("delete")}</button>
+        {/if}
+      </div>
     </div>
   </div>
+
+  <Modal open={confirming} title={t("delete_title", { name: skill.name })} onClose={() => (confirming = false)}>
+    <p>{t("delete_body")}</p>
+    {#snippet actions()}
+      <button type="button" class="sl-btn" onclick={() => (confirming = false)}>{t("cancel")}</button>
+      <button type="button" class="sl-btn sl-btn--danger" onclick={confirmDelete}>{t("delete")}</button>
+    {/snippet}
+  </Modal>
 {/if}
 
 <style>
@@ -219,6 +244,13 @@
     font-size: 12.5px;
     min-height: 260px;
     resize: vertical;
+  }
+  .sl-panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
   }
   .sl-error {
     color: var(--red);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { addSkill, editSkill, filterSkills, linkOf, newestFirst, NOTES_MAX, NOTES_TEMPLATE, readFilters, readSettings, renameQuadrant, readSkills, type Skill } from "../src/lib/skills.ts";
+import { addSkill, canDelete, deleteSkill, editSkill, filterSkills, linkOf, newestFirst, NOTES_MAX, NOTES_TEMPLATE, readFilters, readSettings, renameQuadrant, readSkills, type Skill } from "../src/lib/skills.ts";
 
 const skill = (id: string, addedAt: string, rest: Partial<Skill> = {}): Skill => ({
   id,
@@ -130,7 +130,7 @@ describe("the link of a skill", () => {
 describe("reading the settings", () => {
   const names = ["Design & planning", "Code & tests", "Writing & docs", "Tooling & workflow"];
 
-  const none = { rings: [], quadrants: [], query: "" };
+  const none = { rings: [], quadrants: [], query: "", archived: false };
 
   test("what cannot be read takes its default", () => {
     assert.deepEqual(readSettings(null), { quadrants: names, tab: "library", filters: none });
@@ -138,7 +138,7 @@ describe("reading the settings", () => {
   });
 
   test("the tab and the filters are kept", () => {
-    const filters = { rings: ["try"], quadrants: [2], query: "tdd" };
+    const filters = { rings: ["try"], quadrants: [2], query: "tdd", archived: true };
     assert.deepEqual(readSettings({ tab: "radar", filters }), { quadrants: names, tab: "radar", filters });
   });
 
@@ -213,11 +213,31 @@ describe("editing a skill", () => {
     assert.equal(removed.skill.updatedAt, "2026-10-23T09:00:00.000Z");
     assert.equal((editSkill(list, "a", { sourceUrl: "" }, now) as { skill: Skill }).skill, list[0]);
   });
+
+  test("a skill is archived and unarchived, and the date changes only when that does", () => {
+    const archived = editSkill(list, "a", { archived: true }, now) as { skill: Skill; skills: Skill[] };
+    assert.equal(archived.skill.archived, true);
+    assert.equal(archived.skill.updatedAt, "2026-10-23T09:00:00.000Z");
+    const again = editSkill(archived.skills, "a", { archived: true }, new Date("2026-11-01T00:00:00Z")) as { skill: Skill };
+    assert.equal(again.skill, archived.skill);
+    const back = editSkill(archived.skills, "a", { archived: false }, now) as { skill: Skill };
+    assert.equal(back.skill.archived, false);
+  });
+
+  test("an archived value that is not a boolean is ignored", () => {
+    const result = editSkill(list, "a", { archived: "yes" as unknown as boolean }, now) as { skill: Skill };
+    assert.equal(result.skill, list[0]);
+  });
 });
 
 describe("reading the filters", () => {
+  test("archived skills are shown only when the stored value is exactly true", () => {
+    assert.equal(readFilters({ archived: true }).archived, true);
+    for (const archived of [false, "true", 1, null, undefined]) assert.equal(readFilters({ archived }).archived, false);
+  });
+
   test("nothing, or something that is not an object, is no filtering", () => {
-    for (const stored of [null, undefined, "x", 3, []]) assert.deepEqual(readFilters(stored), { rings: [], quadrants: [], query: "" });
+    for (const stored of [null, undefined, "x", 3, []]) assert.deepEqual(readFilters(stored), { rings: [], quadrants: [], query: "", archived: false });
   });
 
   test("an unknown ring, a quadrant out of range and a duplicate are dropped", () => {
@@ -225,11 +245,12 @@ describe("reading the filters", () => {
       rings: ["try", "watch"],
       quadrants: [1, 3],
       query: "tdd",
+      archived: false,
     });
   });
 
   test("a value of the wrong kind takes its default", () => {
-    assert.deepEqual(readFilters({ rings: "try", quadrants: 1, query: 3 }), { rings: [], quadrants: [], query: "" });
+    assert.deepEqual(readFilters({ rings: "try", quadrants: 1, query: 3 }), { rings: [], quadrants: [], query: "", archived: false });
   });
 });
 
@@ -239,12 +260,19 @@ describe("filtering the library", () => {
     skill("a", at, { name: "Écrire un ADR", ring: "try", quadrant: 2 }),
     skill("b", at, { name: "tdd-loop", ring: "recommended", quadrant: 1 }),
     skill("c", at, { name: "Plan", ring: "try", quadrant: 0 }),
+    skill("d", at, { name: "Old plan", ring: "try", quadrant: 0, archived: true }),
   ];
   const by = (filters: Partial<Parameters<typeof filterSkills>[1]>) =>
-    filterSkills(list, { rings: [], quadrants: [], query: "", ...filters }).map((item) => item.id);
+    filterSkills(list, { rings: [], quadrants: [], query: "", archived: false, ...filters }).map((item) => item.id);
 
-  test("no filter keeps every skill, in its order", () => {
+  test("no filter keeps every skill that is not archived, in its order", () => {
     assert.deepEqual(by({}), ["a", "b", "c"]);
+  });
+
+  test("the archived skills are kept too when asked, still subject to the other filters", () => {
+    assert.deepEqual(by({ archived: true }), ["a", "b", "c", "d"]);
+    assert.deepEqual(by({ archived: true, query: "plan" }), ["c", "d"]);
+    assert.deepEqual(by({ archived: false, query: "plan" }), ["c"]);
   });
 
   test("several rings keep the skills of any of them", () => {
@@ -273,6 +301,35 @@ describe("filtering the library", () => {
   test("the search and the filters together keep the skills that match all", () => {
     assert.deepEqual(by({ query: "a", rings: ["recommended"] }), []);
     assert.deepEqual(by({ query: "plan", rings: ["try"] }), ["c"]);
+  });
+});
+
+describe("deleting a skill", () => {
+  const at = "2026-10-01T00:00:00.000Z";
+  const list = [skill("a", at), skill("b", at), skill("c", at)];
+  const editions = [{ entries: [{ id: "b" }] }, { entries: [{ id: "x" }, { id: "y" }] }];
+
+  test("a skill that is in no edition can be deleted", () => {
+    assert.equal(canDelete("a", editions), true);
+    assert.equal(canDelete("a", []), true);
+  });
+
+  test("a skill that is in an edition cannot", () => {
+    assert.equal(canDelete("b", editions), false);
+    assert.equal(canDelete("y", editions), false);
+  });
+
+  test("deleting gives the list without the skill, the others the same objects in the same order", () => {
+    const result = deleteSkill(list, "b", []);
+    assert.equal(result?.length, 2);
+    assert.equal(result?.[0], list[0]);
+    assert.equal(result?.[1], list[2]);
+    assert.equal(list.length, 3);
+  });
+
+  test("a skill that was published, or that does not exist, is not deleted", () => {
+    assert.equal(deleteSkill(list, "b", editions), null);
+    assert.equal(deleteSkill(list, "nope", editions), null);
   });
 });
 

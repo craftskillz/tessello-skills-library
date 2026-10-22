@@ -54,6 +54,15 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+.sl-btn--danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+.sl-btn--danger:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+  background: var(--red-soft);
+}
 .sl-btn--primary {
   background: var(--accent);
   border-color: var(--accent);
