@@ -1,0 +1,19 @@
+{
+  "convention": 1,
+  "id": "@craftskillz/skills-library",
+  "name": "Skills Library",
+  "version": "0.1.0",
+  "description": "Keep the agent skills you have judged, place them on a radar, and publish it as a blog post.",
+  "icon": "icon.svg",
+  "view": {
+    "entry": "view/index.html"
+  },
+  "guide": "guide/guide.md",
+  "widget": {
+    "entry": "widget/index.html",
+    "size": "M"
+  },
+  "permissions": {
+    "network": ["https://raw.githubusercontent.com"]
+  }
+}
