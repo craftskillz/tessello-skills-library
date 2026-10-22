@@ -34,6 +34,26 @@ const en = {
   ring_deprecated: "Deprecated",
   stars: "{score} out of 5",
 
+  edit_skill: "Edit {name}",
+  close: "Close",
+  ring: "Ring",
+  score: "Score",
+  quadrant: "Quadrant",
+  notes: "Notes",
+  name_required: "A name is required.",
+  notes_too_long: "Notes are limited to 8,000 characters.",
+  url_taken: "Another skill already has this URL.",
+
+  rename_quadrants: "Rename quadrants",
+  quadrant_n: "Quadrant {n}",
+  quadrant_required: "A quadrant name is required.",
+
+  search: "Search by name",
+  filter_rings: "Filter by ring",
+  filter_quadrants: "Filter by quadrant",
+  clear_filters: "Clear filters",
+  no_match: "No skill matches these filters.",
+
   module_name: "Skills Library",
   widget_count: "{count} skills",
   widget_count_one: "1 skill",
@@ -79,6 +99,26 @@ const fr: Messages = {
   ring_watch: "À surveiller",
   ring_deprecated: "Dépréciée",
   stars: "{score} sur 5",
+
+  edit_skill: "Modifier {name}",
+  close: "Fermer",
+  ring: "Anneau",
+  score: "Note",
+  quadrant: "Quadrant",
+  notes: "Notes",
+  name_required: "Un nom est requis.",
+  notes_too_long: "Les notes sont limitées à 8 000 caractères.",
+  url_taken: "Une autre skill a déjà cette URL.",
+
+  rename_quadrants: "Renommer les quadrants",
+  quadrant_n: "Quadrant {n}",
+  quadrant_required: "Un nom de quadrant est requis.",
+
+  search: "Rechercher par nom",
+  filter_rings: "Filtrer par anneau",
+  filter_quadrants: "Filtrer par quadrant",
+  clear_filters: "Effacer les filtres",
+  no_match: "Aucune skill ne correspond à ces filtres.",
 
   module_name: "Skills Library",
   widget_count: "{count} skills",

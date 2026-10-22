@@ -3,14 +3,14 @@
 // (CONVENTION.md §4). Skills that could not be read cannot be changed, so that an empty list never overwrites them.
 
 import type { ConnectedModule } from "@tessello/sdk";
-import { addUnlessDuplicate } from "./github.ts";
+import { addUnlessDuplicate, editUnlessDuplicate } from "./github.ts";
 import { t } from "./i18n.ts";
-import { DEFAULT_QUADRANTS, type Draft, type Settings, type Skill, type Tab } from "./skills.ts";
+import { DEFAULT_QUADRANTS, type Draft, type Filters, renameQuadrant as renamed, type Settings, type Skill, type SkillEdit, type Tab } from "./skills.ts";
 import { reasonOf, type SkillStorage, skillStorage } from "./storage.ts";
 
 export const skills = $state<{ list: Skill[] }>({ list: [] });
 
-export const settings = $state<Settings>({ quadrants: [...DEFAULT_QUADRANTS], tab: "library", filters: {} });
+export const settings = $state<Settings>({ quadrants: [...DEFAULT_QUADRANTS], tab: "library", filters: { rings: [], quadrants: [], query: "" } });
 
 export const status = $state({
   /** False until the skills are read, and again while they cannot be read. */
@@ -85,5 +85,36 @@ export function add(draft: Draft): { added: Skill } | { duplicate: Skill } | nul
 export function setTab(tab: Tab): void {
   if (!status.loaded) return;
   settings.tab = tab;
+  void saveSettings();
+}
+
+/**
+ * Saves a change to a skill. The answer is `editUnlessDuplicate`'s, so that the View can tell the User why a change was
+ * refused; null, with nothing changed, while the skills cannot be read or when there is no such skill.
+ */
+export function edit(id: string, change: SkillEdit): ReturnType<typeof editUnlessDuplicate> {
+  if (!status.loaded) return null;
+  const result = editUnlessDuplicate(skills.list, id, change, new Date());
+  if (result && "skill" in result) {
+    skills.list = result.skills;
+    void save();
+  }
+  return result;
+}
+
+/** Renames a quadrant and saves it; false, with nothing changed, when the name is blank or too long. */
+export function renameQuadrant(index: number, name: string): boolean {
+  if (!status.loaded) return false;
+  const quadrants = renamed(settings.quadrants, index, name);
+  if (!quadrants) return false;
+  settings.quadrants = quadrants;
+  void saveSettings();
+  return true;
+}
+
+/** Filters the Library, which the View remembers. */
+export function setFilters(filters: Filters): void {
+  if (!status.loaded) return;
+  settings.filters = filters;
   void saveSettings();
 }

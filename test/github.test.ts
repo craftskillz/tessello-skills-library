@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { addUnlessDuplicate, defaultName, duplicateKey, fetchSkill, findDuplicate, parseSkillUrl, readSkillFrontmatter } from "../src/lib/github.ts";
+import { addUnlessDuplicate, editUnlessDuplicate, defaultName, duplicateKey, fetchSkill, findDuplicate, parseSkillUrl, readSkillFrontmatter } from "../src/lib/github.ts";
 import type { Skill } from "../src/lib/skills.ts";
 
 const tdd = {
@@ -225,6 +225,42 @@ describe("adding a skill that may be there already", () => {
 
   test("a blank name adds nothing and is no duplicate", () => {
     assert.equal(addUnlessDuplicate([], { name: " " }, now, "b"), null);
+  });
+});
+
+describe("editing a skill that may take the url of another", () => {
+  const now = new Date("2026-10-23T09:00:00Z");
+  const other = skill("b", "https://github.com/acme/skills/tree/main/tdd", { archived: true });
+  const list = [skill("a", "https://example.com"), other, skill("c")];
+
+  test("a url that another skill has, archived or not, saves nothing and gives that skill", () => {
+    assert.deepEqual(editUnlessDuplicate(list, "a", { sourceUrl: "github.com/Acme/Skills/blob/main/tdd/SKILL.md", ring: "try" }, now), { duplicate: other });
+  });
+
+  test("a new url is saved", () => {
+    const result = editUnlessDuplicate(list, "a", { sourceUrl: "https://example.com/new" }, now);
+    assert.ok(result && "skill" in result);
+    assert.equal(result.skill.sourceUrl, "https://example.com/new");
+  });
+
+  test("a skill is never a duplicate of itself", () => {
+    const result = editUnlessDuplicate(list, "b", { sourceUrl: "https://raw.githubusercontent.com/acme/skills/main/tdd/SKILL.md", ring: "try" }, now);
+    assert.ok(result && "skill" in result);
+    assert.equal(result.skill.ring, "try");
+  });
+
+  test("a blank url has no key, so it is no duplicate of the skills without a url", () => {
+    const result = editUnlessDuplicate(list, "a", { sourceUrl: "  " }, now);
+    assert.ok(result && "skill" in result);
+    assert.equal("sourceUrl" in result.skill, false);
+  });
+
+  test("an edit without a url, an unknown id and the errors of the edit come through as they are", () => {
+    assert.equal(editUnlessDuplicate(list, "zzz", { sourceUrl: "https://example.com" }, now), null);
+    assert.deepEqual(editUnlessDuplicate(list, "a", { name: " " }, now), { error: "name_required" });
+    const result = editUnlessDuplicate(list, "a", { score: 5 }, now);
+    assert.ok(result && "skill" in result);
+    assert.equal(result.skill.score, 5);
   });
 });
 

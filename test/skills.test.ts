@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { addSkill, linkOf, newestFirst, NOTES_TEMPLATE, readSettings, readSkills, type Skill } from "../src/lib/skills.ts";
+import { addSkill, editSkill, filterSkills, linkOf, newestFirst, NOTES_MAX, NOTES_TEMPLATE, readFilters, readSettings, renameQuadrant, readSkills, type Skill } from "../src/lib/skills.ts";
 
 const skill = (id: string, addedAt: string, rest: Partial<Skill> = {}): Skill => ({
   id,
@@ -130,18 +130,167 @@ describe("the link of a skill", () => {
 describe("reading the settings", () => {
   const names = ["Design & planning", "Code & tests", "Writing & docs", "Tooling & workflow"];
 
+  const none = { rings: [], quadrants: [], query: "" };
+
   test("what cannot be read takes its default", () => {
-    assert.deepEqual(readSettings(null), { quadrants: names, tab: "library", filters: {} });
-    assert.deepEqual(readSettings({ quadrants: "x", tab: "nowhere", filters: [] }), { quadrants: names, tab: "library", filters: {} });
+    assert.deepEqual(readSettings(null), { quadrants: names, tab: "library", filters: none });
+    assert.deepEqual(readSettings({ quadrants: "x", tab: "nowhere", filters: [] }), { quadrants: names, tab: "library", filters: none });
   });
 
   test("the tab and the filters are kept", () => {
-    assert.deepEqual(readSettings({ tab: "radar", filters: { ring: "try" } }), { quadrants: names, tab: "radar", filters: { ring: "try" } });
+    const filters = { rings: ["try"], quadrants: [2], query: "tdd" };
+    assert.deepEqual(readSettings({ tab: "radar", filters }), { quadrants: names, tab: "radar", filters });
   });
 
   test("a quadrant is named without the spaces around it; a blank or too long name takes its default", () => {
     const settings = readSettings({ quadrants: ["  Mine ", "   ", "x".repeat(41), 3] });
     assert.deepEqual(settings.quadrants, ["Mine", names[1], names[2], names[3]]);
     assert.equal(readSettings({ quadrants: ["x".repeat(40)] }).quadrants[0], "x".repeat(40));
+  });
+});
+
+describe("editing a skill", () => {
+  const now = new Date("2026-10-23T09:00:00Z");
+  const list = [skill("a", "2026-10-01T00:00:00.000Z"), skill("b", "2026-10-02T00:00:00.000Z")];
+
+  test("a changed value is saved, with the date of the change, and the others are untouched", () => {
+    const result = editSkill(list, "b", { ring: "try" }, now);
+    assert.ok(result && "skill" in result);
+    assert.equal(result.skill.ring, "try");
+    assert.equal(result.skill.updatedAt, "2026-10-23T09:00:00.000Z");
+    assert.equal(result.skill.addedAt, "2026-10-02T00:00:00.000Z");
+    assert.deepEqual(result.skills.map((item) => item.id), ["a", "b"]);
+    assert.equal(result.skills[0], list[0]);
+    assert.equal(result.skills[1], result.skill);
+  });
+
+  test("an unknown id edits nothing", () => {
+    assert.equal(editSkill(list, "zzz", { ring: "try" }, now), null);
+  });
+
+  test("a change to what the skill already has changes nothing, not even its date", () => {
+    const result = editSkill(list, "a", { ring: "watch", score: 3, name: "Skill a", description: "" }, now);
+    assert.ok(result && "skill" in result);
+    assert.equal(result.skill, list[0]);
+    assert.equal(result.skills, list);
+    assert.equal(editSkill(list, "a", {}, now) && (editSkill(list, "a", {}, now) as { skill: Skill }).skill, list[0]);
+  });
+
+  test("a quadrant, a ring or a score that does not exist is ignored", () => {
+    const result = editSkill(list, "a", { quadrant: 4, ring: "adopt" as never, score: 6 }, now);
+    assert.ok(result && "skill" in result);
+    assert.equal(result.skill, list[0]);
+    for (const score of [0, 2.5, Number.NaN]) assert.equal((editSkill(list, "a", { score }, now) as { skill: Skill }).skill, list[0]);
+    assert.equal((editSkill(list, "a", { quadrant: -1 }, now) as { skill: Skill }).skill, list[0]);
+    assert.equal((editSkill(list, "a", { quadrant: 3, score: 5 }, now) as { skill: Skill }).skill.quadrant, 3);
+  });
+
+  test("the name, the description and the notes are kept as typed, only clipped", () => {
+    const result = editSkill(list, "a", { name: " Écrire ", description: "d ".repeat(400), notes: "line \n" }, now) as { skill: Skill };
+    assert.equal(result.skill.name, " Écrire ");
+    assert.equal(result.skill.description, ("d ".repeat(400)).slice(0, 500));
+    assert.equal(result.skill.notes, "line \n");
+    assert.equal((editSkill(list, "a", { name: "n".repeat(300) }, now) as { skill: Skill }).skill.name, "n".repeat(100));
+  });
+
+  test("a blank name is refused and nothing is saved", () => {
+    assert.deepEqual(editSkill(list, "a", { name: "   " }, now), { error: "name_required" });
+    assert.deepEqual(editSkill(list, "a", { name: "", ring: "try" }, now), { error: "name_required" });
+  });
+
+  test("notes longer than the View accepts are refused, those of exactly that length are not", () => {
+    assert.deepEqual(editSkill(list, "a", { notes: "n".repeat(NOTES_MAX + 1) }, now), { error: "notes_too_long" });
+    assert.equal(NOTES_MAX, 8000);
+    const result = editSkill(list, "a", { notes: "n".repeat(NOTES_MAX) }, now) as { skill: Skill };
+    assert.equal(result.skill.notes.length, 8000);
+  });
+
+  test("a url is saved without the spaces around it, and a blank one removes it", () => {
+    const set = editSkill(list, "a", { sourceUrl: "  https://example.com/x " }, now) as { skill: Skill; skills: Skill[] };
+    assert.equal(set.skill.sourceUrl, "https://example.com/x");
+    const removed = editSkill(set.skills, "a", { sourceUrl: "  " }, now) as { skill: Skill };
+    assert.equal("sourceUrl" in removed.skill, false);
+    assert.equal(removed.skill.updatedAt, "2026-10-23T09:00:00.000Z");
+    assert.equal((editSkill(list, "a", { sourceUrl: "" }, now) as { skill: Skill }).skill, list[0]);
+  });
+});
+
+describe("reading the filters", () => {
+  test("nothing, or something that is not an object, is no filtering", () => {
+    for (const stored of [null, undefined, "x", 3, []]) assert.deepEqual(readFilters(stored), { rings: [], quadrants: [], query: "" });
+  });
+
+  test("an unknown ring, a quadrant out of range and a duplicate are dropped", () => {
+    assert.deepEqual(readFilters({ rings: ["try", "adopt", "try", 3, "watch"], quadrants: [1, 4, 1, -1, 2.5, "0", 3], query: "tdd" }), {
+      rings: ["try", "watch"],
+      quadrants: [1, 3],
+      query: "tdd",
+    });
+  });
+
+  test("a value of the wrong kind takes its default", () => {
+    assert.deepEqual(readFilters({ rings: "try", quadrants: 1, query: 3 }), { rings: [], quadrants: [], query: "" });
+  });
+});
+
+describe("filtering the library", () => {
+  const at = "2026-10-01T00:00:00.000Z";
+  const list = [
+    skill("a", at, { name: "Écrire un ADR", ring: "try", quadrant: 2 }),
+    skill("b", at, { name: "tdd-loop", ring: "recommended", quadrant: 1 }),
+    skill("c", at, { name: "Plan", ring: "try", quadrant: 0 }),
+  ];
+  const by = (filters: Partial<Parameters<typeof filterSkills>[1]>) =>
+    filterSkills(list, { rings: [], quadrants: [], query: "", ...filters }).map((item) => item.id);
+
+  test("no filter keeps every skill, in its order", () => {
+    assert.deepEqual(by({}), ["a", "b", "c"]);
+  });
+
+  test("several rings keep the skills of any of them", () => {
+    assert.deepEqual(by({ rings: ["try"] }), ["a", "c"]);
+    assert.deepEqual(by({ rings: ["try", "recommended"] }), ["a", "b", "c"]);
+    assert.deepEqual(by({ rings: ["deprecated"] }), []);
+  });
+
+  test("several quadrants keep the skills of any of them", () => {
+    assert.deepEqual(by({ quadrants: [0, 2] }), ["a", "c"]);
+  });
+
+  test("the rings and the quadrants together keep the skills that match both", () => {
+    assert.deepEqual(by({ rings: ["try"], quadrants: [2] }), ["a"]);
+  });
+
+  test("the search finds a part of the name, ignoring case and accents", () => {
+    assert.deepEqual(by({ query: "ecrire" }), ["a"]);
+    assert.deepEqual(by({ query: "ÉCRIRE" }), ["a"]);
+    assert.deepEqual(by({ query: "TDD" }), ["b"]);
+    assert.deepEqual(by({ query: "  loop " }), ["b"]);
+    assert.deepEqual(by({ query: "   " }), ["a", "b", "c"]);
+    assert.deepEqual(by({ query: "nothing" }), []);
+  });
+
+  test("the search and the filters together keep the skills that match all", () => {
+    assert.deepEqual(by({ query: "a", rings: ["recommended"] }), []);
+    assert.deepEqual(by({ query: "plan", rings: ["try"] }), ["c"]);
+  });
+});
+
+describe("renaming a quadrant", () => {
+  const names: [string, string, string, string] = ["A", "B", "C", "D"];
+
+  test("gives the names with the new one in place, trimmed, and leaves the old ones as they were", () => {
+    assert.deepEqual(renameQuadrant(names, 2, "  Mine "), ["A", "B", "Mine", "D"]);
+    assert.deepEqual(names, ["A", "B", "C", "D"]);
+    assert.deepEqual(renameQuadrant(names, 0, "x".repeat(40)), ["x".repeat(40), "B", "C", "D"]);
+  });
+
+  test("a blank name, or one longer than 40 characters, is refused", () => {
+    assert.equal(renameQuadrant(names, 1, "   "), null);
+    assert.equal(renameQuadrant(names, 1, "x".repeat(41)), null);
+  });
+
+  test("a quadrant that does not exist is refused", () => {
+    for (const index of [-1, 4, 1.5]) assert.equal(renameQuadrant(names, index, "Mine"), null);
   });
 });

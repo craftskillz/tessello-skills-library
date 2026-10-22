@@ -68,6 +68,46 @@ export function addSkill(skills: readonly Skill[], draft: Draft, now: Date, id: 
   return { skills: [skill, ...skills], skill };
 }
 
+/** The longest notes the View accepts. */
+export const NOTES_MAX = 8000;
+
+/** What the User changes in a skill; what is not given stays as it is. */
+export type SkillEdit = Partial<Pick<Skill, "name" | "sourceUrl" | "description" | "quadrant" | "ring" | "score" | "notes">>;
+
+/**
+ * Saves a change to the skill `id` at the date `now`; null when there is no such skill. The name, the description and the
+ * notes are kept as typed, since the User is still typing: the name and the description are only clipped, and a blank
+ * name or notes that are too long are refused with nothing saved. A blank url removes the url. A quadrant, a ring or a
+ * score that does not exist is ignored. The date changes only when a value does, and the other skills are the same
+ * objects, in the same order.
+ */
+export function editSkill(
+  skills: readonly Skill[],
+  id: string,
+  edit: SkillEdit,
+  now: Date,
+): { skills: Skill[]; skill: Skill } | { error: "name_required" | "notes_too_long" } | null {
+  const current = skills.find((skill) => skill.id === id);
+  if (!current) return null;
+  if (edit.name !== undefined && !edit.name.trim()) return { error: "name_required" };
+  if (edit.notes !== undefined && edit.notes.length > NOTES_MAX) return { error: "notes_too_long" };
+  const changes: Partial<Skill> = {};
+  if (edit.name !== undefined) changes.name = edit.name.slice(0, NAME_MAX);
+  if (edit.description !== undefined) changes.description = edit.description.slice(0, DESCRIPTION_MAX);
+  if (edit.notes !== undefined) changes.notes = edit.notes;
+  if (edit.quadrant !== undefined && integerBetween(edit.quadrant, 0, 3) !== undefined) changes.quadrant = edit.quadrant;
+  if (edit.score !== undefined && integerBetween(edit.score, 1, 5) !== undefined) changes.score = edit.score;
+  if (edit.ring !== undefined && RINGS.includes(edit.ring)) changes.ring = edit.ring;
+  const changed = (Object.keys(changes) as (keyof Skill)[]).some((key) => changes[key] !== current[key]);
+  const url = edit.sourceUrl?.trim();
+  const urlChanged = edit.sourceUrl !== undefined && (url || undefined) !== current.sourceUrl;
+  if (!changed && !urlChanged) return { skills: skills as Skill[], skill: current };
+  const { sourceUrl: _old, ...rest } = current;
+  const nextUrl = edit.sourceUrl !== undefined ? url : current.sourceUrl;
+  const skill: Skill = { ...rest, ...changes, ...(nextUrl ? { sourceUrl: nextUrl } : {}), updatedAt: now.toISOString() };
+  return { skills: skills.map((item) => (item === current ? skill : item)), skill };
+}
+
 /** The most recently added first; skills added at the same date stay in the order they were. */
 export function newestFirst(skills: readonly Skill[]): Skill[] {
   return [...skills].sort((a, b) => b.addedAt.localeCompare(a.addedAt));
@@ -123,8 +163,48 @@ export interface Settings {
   quadrants: [string, string, string, string];
   /** The tab the View was left on. */
   tab: Tab;
-  /** What the Library is filtered by, by filter. */
-  filters: Record<string, unknown>;
+  /** What the Library is filtered by. */
+  filters: Filters;
+}
+
+/** What the Library is filtered by: none selected in a list is no filtering on that axis. */
+export interface Filters {
+  rings: Ring[];
+  quadrants: number[];
+  /** A part of the name. */
+  query: string;
+}
+
+/** The filters under the key `filters` of the settings; what cannot be read is no filtering. */
+export function readFilters(stored: unknown): Filters {
+  const value = record(stored);
+  const rings = Array.isArray(value.rings) ? value.rings : [];
+  const quadrants = Array.isArray(value.quadrants) ? value.quadrants : [];
+  return {
+    rings: RINGS.filter((ring) => rings.includes(ring)),
+    quadrants: [...new Set(quadrants.filter((quadrant) => integerBetween(quadrant, 0, 3) !== undefined))],
+    query: text(value.query) ?? "",
+  };
+}
+
+/** The skills that have one of the rings and one of the quadrants selected, and a name with the query in it; in their order. */
+export function filterSkills(skills: readonly Skill[], filters: Filters): Skill[] {
+  const query = plain(filters.query.trim());
+  return skills.filter(
+    (skill) =>
+      (filters.rings.length === 0 || filters.rings.includes(skill.ring)) &&
+      (filters.quadrants.length === 0 || filters.quadrants.includes(skill.quadrant)) &&
+      plain(skill.name).includes(query),
+  );
+}
+
+/** The names of the quadrants with the one at `index` renamed; null when the name is blank or too long, or there is no such quadrant. */
+export function renameQuadrant(quadrants: Settings["quadrants"], index: number, name: string): Settings["quadrants"] | null {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length > QUADRANT_NAME_MAX || integerBetween(index, 0, 3) === undefined) return null;
+  const renamed = [...quadrants] as Settings["quadrants"];
+  renamed[index] = trimmed;
+  return renamed;
 }
 
 /** The settings under the key `settings`; what cannot be read takes its default. */
@@ -135,8 +215,7 @@ export function readSettings(stored: unknown): Settings {
     const name = text(names[index])?.trim();
     return name && name.length <= QUADRANT_NAME_MAX ? name : fallback;
   }) as Settings["quadrants"];
-  const filters = value.filters && typeof value.filters === "object" && !Array.isArray(value.filters) ? (value.filters as Record<string, unknown>) : {};
-  return { quadrants, tab: TABS.find((tab) => tab === value.tab) ?? "library", filters };
+  return { quadrants, tab: TABS.find((tab) => tab === value.tab) ?? "library", filters: readFilters(value.filters) };
 }
 
 /** The url of a skill when it is an http or https one, which the View opens in a new tab; null otherwise. */
@@ -150,6 +229,8 @@ export function linkOf(skill: Skill): string | null {
   }
 }
 
+/** A text in lowercase with no accents, to compare names the way the User types them. */
+const plain = (value: string) => value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 const record = (value: unknown): Record<string, unknown> => (value && typeof value === "object" ? (value as Record<string, unknown>) : {});
 const text = (value: unknown) => (typeof value === "string" ? value : undefined);
 const date = (value: unknown) => (typeof value === "string" && !Number.isNaN(Date.parse(value)) ? new Date(value).toISOString() : undefined);

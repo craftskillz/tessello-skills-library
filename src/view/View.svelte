@@ -2,11 +2,13 @@
   import { tick } from "svelte";
   import { fetchSkill, findDuplicate, parseSkillUrl } from "../lib/github.ts";
   import { t, type MessageKey } from "../lib/i18n.ts";
-  import { linkOf, newestFirst, type Skill, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX } from "../lib/skills.ts";
-  import { add, load, setTab, settings, skills, status } from "../lib/store.svelte.ts";
+  import { filterSkills, linkOf, newestFirst, type Ring, RINGS, type Skill, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX, QUADRANT_NAME_MAX } from "../lib/skills.ts";
+  import { add, load, renameQuadrant, setFilters, setTab, settings, skills, status } from "../lib/store.svelte.ts";
+  import EditPanel from "./EditPanel.svelte";
   import Modal from "./Modal.svelte";
 
-  const shown = $derived(newestFirst(skills.list));
+  const shown = $derived(filterSkills(newestFirst(skills.list), settings.filters));
+  const filtered = $derived(settings.filters.rings.length > 0 || settings.filters.quadrants.length > 0 || settings.filters.query.trim() !== "");
 
   let adding = $state(false);
   let name = $state("");
@@ -23,8 +25,9 @@
   let highlighted = $state("");
   let highlightTimer: ReturnType<typeof setTimeout> | undefined;
 
-  /** Highlights the row of a skill a moment, and scrolls to it. */
+  /** Highlights the row of a skill a moment, and scrolls to it; filters that hide it are cleared. */
   async function show(skill: Skill) {
+    if (!shown.some((item) => item.id === skill.id)) setFilters({ rings: [], quadrants: [], query: "" });
     highlighted = skill.id;
     clearTimeout(highlightTimer);
     highlightTimer = setTimeout(() => (highlighted = ""), 2000);
@@ -33,8 +36,39 @@
     document.querySelector(`[data-skill-id="${skill.id}"]`)?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "nearest" });
   }
 
-  /** What a skill just added gets. The edit panel will open here (ticket 03). */
-  const select = show;
+  /** The skill whose edit panel is open. */
+  let editing = $state("");
+
+  /** What a skill just added gets: its row is shown, and its edit panel opens. */
+  function select(skill: Skill) {
+    editing = skill.id;
+    return show(skill);
+  }
+
+  /** A click on a row opens its panel, unless it is on a link or a button. */
+  function onRowClick(event: MouseEvent, skill: Skill) {
+    if ((event.target as HTMLElement).closest("a, button")) return;
+    editing = skill.id;
+  }
+
+  function toggle<T>(list: T[], value: T): T[] {
+    return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+  }
+
+  // The names of the quadrants being typed, which can differ from the saved ones while one is blank.
+  let renaming = $state(false);
+  let quadrantNames = $state<string[]>([]);
+  let quadrantErrors = $state<boolean[]>([false, false, false, false]);
+
+  function openRename() {
+    quadrantNames = [...settings.quadrants];
+    quadrantErrors = [false, false, false, false];
+    renaming = true;
+  }
+
+  function typeQuadrant(index: number) {
+    quadrantErrors[index] = !renameQuadrant(index, quadrantNames[index]);
+  }
 
   // The field to paste a GitHub URL in, and what it answers.
   let pasted = $state("");
@@ -123,7 +157,7 @@
   const stars = (score: number) => "★".repeat(score) + "☆".repeat(5 - score);
 </script>
 
-<div class="sl-root">
+<div class="sl-root" class:sl-root--panel={editing !== ""}>
   {#if status.loadError}
     <div class="sl-blocked" role="alert">
       <p>{status.loadError}</p>
@@ -150,7 +184,12 @@
           </button>
         {/each}
       </div>
-      <button type="button" class="sl-btn sl-btn--primary" onclick={() => openForm()}>{t("add_manually")}</button>
+      <div class="sl-actions">
+        {#if settings.tab === "library"}
+          <button type="button" class="sl-btn" onclick={openRename}>{t("rename_quadrants")}</button>
+        {/if}
+        <button type="button" class="sl-btn sl-btn--primary" onclick={() => openForm()}>{t("add_manually")}</button>
+      </div>
     </header>
     {#if status.saveError}
       <p class="sl-banner" role="alert">{status.saveError}</p>
@@ -179,11 +218,54 @@
             {/if}
           {/if}
         </div>
+        {#if skills.list.length}
+          <div class="sl-filters">
+            <label class="sl-search">
+              {t("search")}
+              <input
+                type="search"
+                autocomplete="off"
+                value={settings.filters.query}
+                oninput={(event) => setFilters({ ...settings.filters, query: event.currentTarget.value })}
+              />
+            </label>
+            <div class="sl-chips" role="group" aria-label={t("filter_rings")}>
+              {#each RINGS as ring (ring)}
+                <button
+                  type="button"
+                  class="sl-chip"
+                  aria-pressed={settings.filters.rings.includes(ring)}
+                  onclick={() => setFilters({ ...settings.filters, rings: RINGS.filter((item) => toggle<Ring>(settings.filters.rings, ring).includes(item)) })}
+                >
+                  {t(`ring_${ring}` as MessageKey)}
+                </button>
+              {/each}
+            </div>
+            <div class="sl-chips" role="group" aria-label={t("filter_quadrants")}>
+              {#each settings.quadrants as quadrant, index (index)}
+                <button
+                  type="button"
+                  class="sl-chip"
+                  aria-pressed={settings.filters.quadrants.includes(index)}
+                  onclick={() => setFilters({ ...settings.filters, quadrants: toggle(settings.filters.quadrants, index).sort((a, b) => a - b) })}
+                >
+                  {quadrant}
+                </button>
+              {/each}
+            </div>
+            {#if filtered}
+              <div>
+                <button type="button" class="sl-btn" onclick={() => setFilters({ rings: [], quadrants: [], query: "" })}>{t("clear_filters")}</button>
+              </div>
+            {/if}
+          </div>
+        {/if}
         {#if shown.length}
           <ul class="sl-list">
             {#each shown as skill (skill.id)}
               {@const link = linkOf(skill)}
-              <li class="sl-skill" class:sl-highlighted={highlighted === skill.id} data-skill-id={skill.id}>
+              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+              <li class="sl-skill" class:sl-highlighted={highlighted === skill.id} data-skill-id={skill.id} onclick={(event) => onRowClick(event, skill)}>
                 <span class="sl-name">
                   {#if link}
                     <a href={link} target="_blank" rel="noopener">{skill.name}</a>
@@ -191,12 +273,15 @@
                     {skill.name}
                   {/if}
                 </span>
+                <button type="button" class="sl-btn" aria-label={t("edit_skill", { name: skill.name })} onclick={() => (editing = skill.id)}>✎</button>
                 <span class="sl-ring sl-ring--{skill.ring}">{t(`ring_${skill.ring}` as MessageKey)}</span>
                 <span class="sl-stars" role="img" aria-label={t("stars", { score: skill.score })}>{stars(skill.score)}</span>
                 <span class="sl-quadrant">{settings.quadrants[skill.quadrant]}</span>
               </li>
             {/each}
           </ul>
+        {:else if skills.list.length}
+          <p class="sl-message">{t("no_match")}</p>
         {:else}
           <p class="sl-message">{t("empty")}</p>
         {/if}
@@ -205,6 +290,36 @@
       {/if}
     </div>
   {/if}
+
+  {#if editing}
+    {#key editing}
+      <EditPanel id={editing} onClose={() => (editing = "")} />
+    {/key}
+  {/if}
+
+  <Modal open={renaming} title={t("rename_quadrants")} onClose={() => (renaming = false)}>
+    <div class="sl-form">
+      {#each quadrantNames as _, index (index)}
+        <div class="sl-field">
+          <label for="sl-quadrant-{index}">{t("quadrant_n", { n: index + 1 })}</label>
+          <input
+            id="sl-quadrant-{index}"
+            type="text"
+            required
+            maxlength={QUADRANT_NAME_MAX}
+            autocomplete="off"
+            aria-invalid={quadrantErrors[index] ? "true" : undefined}
+            bind:value={quadrantNames[index]}
+            oninput={() => typeQuadrant(index)}
+          />
+          {#if quadrantErrors[index]}<span class="sl-error" role="alert">{t("quadrant_required")}</span>{/if}
+        </div>
+      {/each}
+    </div>
+    {#snippet actions()}
+      <button type="button" class="sl-btn sl-btn--primary" onclick={() => (renaming = false)}>{t("close")}</button>
+    {/snippet}
+  </Modal>
 
   <Modal open={adding} title={t("add_title")} onClose={() => (adding = false)}>
     <form id="sl-add-form" class="sl-form" onsubmit={submit}>
@@ -237,12 +352,71 @@
     flex-direction: column;
     gap: 16px;
   }
+  /* On a wide page the edit panel sits beside the list instead of over it, so that the bar stays within reach. */
+  @media (min-width: 900px) {
+    .sl-root--panel {
+      margin: 0;
+      max-width: min(960px, calc(100% - 400px));
+    }
+  }
   .sl-bar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+  }
+  .sl-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .sl-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .sl-search {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+  }
+  .sl-search input {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    font: inherit;
+  }
+  .sl-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .sl-chip {
+    font: inherit;
+    font-size: 12px;
+    padding: 4px 11px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: none;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .sl-chip[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .sl-skill {
+    cursor: pointer;
+  }
+  .sl-error {
+    color: var(--red);
+    font-size: 12px;
   }
   .sl-tabs {
     display: flex;
@@ -363,6 +537,12 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+  .sl-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
   }
   .sl-form label {
     display: flex;

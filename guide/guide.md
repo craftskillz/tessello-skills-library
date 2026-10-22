@@ -19,6 +19,30 @@ After any of the last three, **Add manually** opens the form with the URL filled
 
 Click **Add manually**, type the name of the skill, and optionally its URL and a description, then click **Add**. The skill appears at the top of the **Library**, to watch, with three stars, in the first quadrant. Its name is a link to its URL, when it has one. A URL that is already in your Library adds nothing.
 
+## Judging a skill
+
+Click a skill in the **Library** (or its pencil button, which works with the keyboard) to open its panel. On a narrow screen it fills the page. It holds:
+
+- **Name**, **URL** and **Description**.
+- **Quadrant**, chosen among the four.
+- **Ring**: Recommended, Try, Watch or Deprecated.
+- **Score**: one to five stars. Click a star, or use the arrow keys once a star is focused.
+- **Notes**: free text in Markdown, up to 8,000 characters. A new skill starts with a template.
+
+Each change is saved as you make it. Close the panel with **Close** or Escape. A change that cannot be saved says why under its field, and what you typed stays in place so you can fix it:
+
+- **A name is required.** The name cannot be blank.
+- **Notes are limited to 8,000 characters.** Trim the notes.
+- **Another skill already has this URL.** Two skills cannot come from the same place.
+
+## Renaming the quadrants
+
+In the **Library**, click **Rename quadrants** and edit the four names (1 to 40 characters, required). A name is saved as soon as it is valid; a blank one shows **A quadrant name is required.** and is not saved. Renaming a quadrant moves no skill: each stays in its quadrant, under the new name.
+
+## Filtering and searching
+
+Above the list, **Search by name** ignores case and accents. The buttons for each ring and each quadrant filter the list; select several to see skills that match any of them. **Clear filters** appears when a filter is on, and **No skill matches these filters.** when nothing is left. The page remembers your filters.
+
 ## The tabs
 
 - **Library** lists your skills, the newest first, with their ring, their stars and their quadrant.

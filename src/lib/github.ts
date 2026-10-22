@@ -1,7 +1,7 @@
 // What the Module knows of GitHub: which URLs are those of a skill (a folder with a `SKILL.md`), the URLs it builds from
 // them, and the reading of the name and the description a `SKILL.md` holds in its frontmatter.
 
-import { addSkill, type Draft, type Skill } from "./skills.ts";
+import { addSkill, editSkill, type Draft, type Skill, type SkillEdit } from "./skills.ts";
 
 export interface ParsedSkillUrl {
   owner: string;
@@ -153,6 +153,21 @@ export function addUnlessDuplicate(
   if (!draft.name.trim()) return null;
   const duplicate = findDuplicate(skills, draft.url);
   return duplicate ? { duplicate } : addSkill(skills, draft, now, id);
+}
+
+/**
+ * `editSkill`, but nothing is saved when the edit gives a url that another skill, archived or not, already has: the answer
+ * is then that skill. A skill is never a duplicate of itself.
+ */
+export function editUnlessDuplicate(
+  skills: readonly Skill[],
+  id: string,
+  edit: SkillEdit,
+  now: Date,
+): ReturnType<typeof editSkill> | { duplicate: Skill } {
+  if (!skills.some((skill) => skill.id === id)) return null;
+  const duplicate = edit.sourceUrl === undefined ? undefined : findDuplicate(skills.filter((skill) => skill.id !== id), edit.sourceUrl);
+  return duplicate ? { duplicate } : editSkill(skills, id, edit, now);
 }
 
 export type FetchedSkill = { ok: true; name: string; description: string } | { ok: false; reason: "not_found" | "network" };
