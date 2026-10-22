@@ -60,6 +60,7 @@ const en = {
   clear_filters: "Clear filters",
   no_match: "No skill matches these filters.",
 
+  radar_title: "Skills radar",
   radar_empty: "Nothing to draw yet. Add a skill in the Library to see it on the radar.",
   radar_unchanged: "Unchanged or updated",
   radar_new: "New or back",
@@ -90,6 +91,9 @@ const en = {
 
   editions_list: "Editions",
   edition_n: "Edition {n}",
+  edition_download: "Download .zip",
+  edition_download_label: "Download edition {n} as .zip",
+  edition_download_error: "The .zip of edition {n} could not be made ({reason}).",
   editions_empty: "No edition yet. Publish one from the Radar.",
 
   module_name: "Skills Library",
@@ -164,6 +168,7 @@ const fr: Messages = {
   clear_filters: "Effacer les filtres",
   no_match: "Aucune skill ne correspond à ces filtres.",
 
+  radar_title: "Radar des skills",
   radar_empty: "Rien à dessiner pour l'instant. Ajoutez une skill dans la Library pour la voir sur le radar.",
   radar_unchanged: "Inchangée ou mise à jour",
   radar_new: "Nouvelle ou de retour",
@@ -194,6 +199,9 @@ const fr: Messages = {
 
   editions_list: "Éditions",
   edition_n: "Édition {n}",
+  edition_download: "Télécharger le .zip",
+  edition_download_label: "Télécharger l'édition {n} en .zip",
+  edition_download_error: "Le .zip de l'édition {n} n'a pas pu être fait ({reason}).",
   editions_empty: "Aucune édition pour l'instant. Publiez-en une depuis le Radar.",
 
   module_name: "Skills Library",

@@ -8,6 +8,7 @@ const entry = (id: string, rest: Partial<RadarEntry> = {}): RadarEntry => ({ id,
 const QUADRANTS = ["Design & planning", "Code & tests", "Writing & docs", "Tooling & workflow"] as const;
 const OPTIONS: RadarOptions = {
   labels: {
+    title: "Skills radar",
     rings: { recommended: "Recommended", try: "Try", watch: "Watch", deprecated: "Deprecated" },
     unchanged: "Unchanged or updated",
     new: "New or back",
@@ -46,6 +47,12 @@ function assertNoOverlap(svg: string) {
     }
   }
 }
+
+test("the title and the label of the drawing are written in the language of the labels", () => {
+  const svg = render([entry("a")], { labels: { ...OPTIONS.labels, title: "Radar des skills" } });
+  assert.ok(svg.includes("<title>Radar des skills: Design &amp; planning, Code &amp; tests"));
+  assert.ok(svg.includes('aria-label="Radar des skills: '));
+});
 
 describe("numbering the entries", () => {
   test("by quadrant, then by ring from the centre, then by name, each from 1", () => {

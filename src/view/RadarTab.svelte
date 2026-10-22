@@ -27,6 +27,7 @@
   const svg = $derived(
     renderRadar(entries, settings.quadrants, {
       labels: {
+        title: t("radar_title"),
         rings: Object.fromEntries(RINGS.map((ring) => [ring, ringName(ring)])) as Record<Ring, string>,
         unchanged: t("radar_unchanged"),
         new: t("radar_new"),

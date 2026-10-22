@@ -17,6 +17,8 @@ export interface RadarEntry {
 
 /** The words the radar writes, in the language of where it is shown. */
 export interface RadarLabels {
+  /** What the drawing is called, for its title and its label. */
+  title: string;
   rings: Record<Ring, string>;
   /** The legend of the markers: a circle. */
   unchanged: string;
@@ -110,10 +112,10 @@ export function renderRadar(
   }
 
   parts.push(legend(labels));
-  const label = escape(quadrants.join(", "));
+  const label = escape(`${labels.title}: ${quadrants.join(", ")}`);
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="Skills radar: ${label}">` +
-    `<title>Skills radar: ${label}</title>${parts.join("")}</svg>`
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="${label}">` +
+    `<title>${label}</title>${parts.join("")}</svg>`
   );
 }
 
