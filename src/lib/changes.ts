@@ -14,9 +14,13 @@ export type Change =
   | { kind: "moved"; previousRing: Ring; towards: "recommended" | "deprecated" }
   | { kind: "retired"; previousRing: Ring };
 
-/** The change of each skill since the last edition (the one with the highest number, whatever the order of the list), by id. */
+/** The last edition: the one with the highest number, whatever the order of the list; undefined when there is none. */
+export const lastEdition = <T extends { number: number }>(editions: readonly T[]) =>
+  editions.reduce<T | undefined>((best, edition) => (!best || edition.number > best.number ? edition : best), undefined);
+
+/** The change of each skill since the last edition, by id. */
 export function changesSince(skills: readonly Skill[], editions: readonly ComparedEdition[]): Map<string, Change> {
-  const last = editions.reduce<ComparedEdition | undefined>((best, edition) => (!best || edition.number > best.number ? edition : best), undefined);
+  const last = lastEdition(editions);
   const changes = new Map<string, Change>();
   for (const skill of skills) {
     const previous = last?.entries.find((entry) => entry.id === skill.id);

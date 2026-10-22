@@ -9,7 +9,6 @@ const en = {
   tab_library: "Library",
   tab_radar: "Radar",
   tab_editions: "Editions",
-  coming_soon: "Coming soon.",
 
   paste_label: "Paste a GitHub URL",
   paste_placeholder: "github.com/owner/repo/tree/main/skills/my-skill",
@@ -76,6 +75,23 @@ const en = {
   change_moved: "Moved: {from} → {to}",
   change_retired: "Retired (was {ring})",
 
+  why_moved: "Why did it move?",
+  reason_too_long: "The explanation is limited to 280 characters.",
+
+  publish_edition: "Publish edition {n}",
+  publish_confirm_title: "Publish edition {n}?",
+  publish_intro: "Introduction",
+  publish_next: "Next",
+  publish: "Publish",
+  publish_confirm_body: "This freezes your radar as edition {n}. It cannot be changed afterwards.",
+  publish_missing: "These skills moved since the last edition. Explain why each one moved before publishing:",
+  publish_failed: "The edition could not be published ({reason}). Nothing was published.",
+  publish_failed_quota: "The edition could not be published: the storage of the Skills Library Module is full. Nothing was published.",
+
+  editions_list: "Editions",
+  edition_n: "Edition {n}",
+  editions_empty: "No edition yet. Publish one from the Radar.",
+
   module_name: "Skills Library",
   widget_count: "{count} skills",
   widget_count_one: "1 skill",
@@ -97,7 +113,6 @@ const fr: Messages = {
   tab_library: "Library",
   tab_radar: "Radar",
   tab_editions: "Éditions",
-  coming_soon: "Bientôt disponible.",
 
   paste_label: "Collez une URL GitHub",
   paste_placeholder: "github.com/owner/repo/tree/main/skills/ma-skill",
@@ -163,6 +178,23 @@ const fr: Messages = {
   change_back: "De retour",
   change_moved: "Déplacée : {from} → {to}",
   change_retired: "Retirée (était {ring})",
+
+  why_moved: "Pourquoi a-t-elle bougé ?",
+  reason_too_long: "L'explication est limitée à 280 caractères.",
+
+  publish_edition: "Publier l'édition {n}",
+  publish_confirm_title: "Publier l'édition {n} ?",
+  publish_intro: "Introduction",
+  publish_next: "Suivant",
+  publish: "Publier",
+  publish_confirm_body: "Cela fige votre radar en édition {n}. Elle ne pourra plus être modifiée ensuite.",
+  publish_missing: "Ces skills ont bougé depuis la dernière édition. Expliquez pourquoi avant de publier :",
+  publish_failed: "L'édition n'a pas pu être publiée ({reason}). Rien n'a été publié.",
+  publish_failed_quota: "L'édition n'a pas pu être publiée : le stockage du Module Skills Library est plein. Rien n'a été publié.",
+
+  editions_list: "Éditions",
+  edition_n: "Édition {n}",
+  editions_empty: "Aucune édition pour l'instant. Publiez-en une depuis le Radar.",
 
   module_name: "Skills Library",
   widget_count: "{count} skills",

@@ -351,3 +351,49 @@ describe("renaming a quadrant", () => {
     for (const index of [-1, 4, 1.5]) assert.equal(renameQuadrant(names, index, "Mine"), null);
   });
 });
+
+describe("the reason of a move", () => {
+  const now = new Date("2026-10-23T09:00:00Z");
+  const list = [skill("a", "2026-10-01T00:00:00.000Z", { ring: "try" }), skill("b", "2026-10-02T00:00:00.000Z", { ring: "try", moveReason: "Proven" })];
+  const edit = (id: string, change: Parameters<typeof editSkill>[2], published?: Parameters<typeof editSkill>[4]) =>
+    editSkill(list, id, change, now, published) as { skill: Skill };
+
+  test("a reason is kept while the ring differs from the published one", () => {
+    const result = edit("a", { moveReason: "Worked well" }, "watch");
+    assert.equal(result.skill.moveReason, "Worked well");
+    assert.equal(result.skill.updatedAt, "2026-10-23T09:00:00.000Z");
+  });
+
+  test("a reason is dropped when the skill is in no edition", () => {
+    assert.equal(edit("a", { moveReason: "Worked well" }).skill.moveReason, undefined);
+  });
+
+  test("returning to the published ring clears the reason", () => {
+    const result = edit("b", { ring: "watch" }, "watch");
+    assert.equal(result.skill.ring, "watch");
+    assert.equal("moveReason" in result.skill, false);
+  });
+
+  test("the reason stays through an edit that leaves the ring moved", () => {
+    const result = edit("b", { score: 4 }, "watch");
+    assert.equal(result.skill.moveReason, "Proven");
+  });
+
+  test("a blank reason removes it", () => {
+    assert.equal("moveReason" in edit("b", { moveReason: "   " }, "watch").skill, false);
+  });
+
+  test("a reason is kept as typed", () => {
+    assert.equal(edit("a", { moveReason: " Why " }, "watch").skill.moveReason, " Why ");
+  });
+
+  test("a reason that is too long is refused and nothing is saved", () => {
+    assert.deepEqual(editSkill(list, "a", { moveReason: "x".repeat(281) }, now, "watch"), { error: "reason_too_long" });
+    assert.equal(edit("a", { moveReason: "x".repeat(280) }, "watch").skill.moveReason, "x".repeat(280));
+  });
+
+  test("the same reason changes nothing, not even the date", () => {
+    const result = editSkill(list, "b", { moveReason: "Proven" }, now, "watch") as { skill: Skill };
+    assert.equal(result.skill, list[1]);
+  });
+});

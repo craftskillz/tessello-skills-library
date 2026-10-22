@@ -71,26 +71,33 @@ export function addSkill(skills: readonly Skill[], draft: Draft, now: Date, id: 
 /** The longest notes the View accepts. */
 export const NOTES_MAX = 8000;
 
+/** The longest explanation of a move. */
+export const REASON_MAX = 280;
+
 /** What the User changes in a skill; what is not given stays as it is. */
-export type SkillEdit = Partial<Pick<Skill, "name" | "sourceUrl" | "description" | "quadrant" | "ring" | "score" | "notes" | "archived">>;
+export type SkillEdit = Partial<Pick<Skill, "name" | "sourceUrl" | "description" | "quadrant" | "ring" | "score" | "notes" | "archived" | "moveReason">>;
 
 /**
  * Saves a change to the skill `id` at the date `now`; null when there is no such skill. The name, the description and the
  * notes are kept as typed, since the User is still typing: the name and the description are only clipped, and a blank
  * name or notes that are too long are refused with nothing saved. A blank url removes the url. A quadrant, a ring or a
- * score that does not exist is ignored, and so is an archived that is not a boolean. The date changes only when a value
- * does, and the other skills are the same objects, in the same order.
+ * score that does not exist is ignored, and so is an archived that is not a boolean. The reason of a move is kept as typed
+ * (a blank one removes it, one that is too long is refused), but only while `publishedRing`, the ring of the skill in the
+ * last edition, is known and differs from its ring: back in that ring, or in no edition, it has no reason. The date
+ * changes only when a value does, and the other skills are the same objects, in the same order.
  */
 export function editSkill(
   skills: readonly Skill[],
   id: string,
   edit: SkillEdit,
   now: Date,
-): { skills: Skill[]; skill: Skill } | { error: "name_required" | "notes_too_long" } | null {
+  publishedRing?: Ring,
+): { skills: Skill[]; skill: Skill } | { error: "name_required" | "notes_too_long" | "reason_too_long" } | null {
   const current = skills.find((skill) => skill.id === id);
   if (!current) return null;
   if (edit.name !== undefined && !edit.name.trim()) return { error: "name_required" };
   if (edit.notes !== undefined && edit.notes.length > NOTES_MAX) return { error: "notes_too_long" };
+  if (edit.moveReason !== undefined && edit.moveReason.length > REASON_MAX) return { error: "reason_too_long" };
   const changes: Partial<Skill> = {};
   if (edit.name !== undefined) changes.name = edit.name.slice(0, NAME_MAX);
   if (edit.description !== undefined) changes.description = edit.description.slice(0, DESCRIPTION_MAX);
@@ -99,13 +106,16 @@ export function editSkill(
   if (edit.score !== undefined && integerBetween(edit.score, 1, 5) !== undefined) changes.score = edit.score;
   if (edit.ring !== undefined && RINGS.includes(edit.ring)) changes.ring = edit.ring;
   if (typeof edit.archived === "boolean") changes.archived = edit.archived;
-  const changed = (Object.keys(changes) as (keyof Skill)[]).some((key) => changes[key] !== current[key]);
+  const ring = changes.ring ?? current.ring;
+  const typed = edit.moveReason !== undefined ? edit.moveReason.trim() && edit.moveReason : current.moveReason;
+  const moveReason = publishedRing !== undefined && publishedRing !== ring ? typed || undefined : undefined;
+  const changed = moveReason !== current.moveReason || (Object.keys(changes) as (keyof Skill)[]).some((key) => changes[key] !== current[key]);
   const url = edit.sourceUrl?.trim();
   const urlChanged = edit.sourceUrl !== undefined && (url || undefined) !== current.sourceUrl;
   if (!changed && !urlChanged) return { skills: skills as Skill[], skill: current };
-  const { sourceUrl: _old, ...rest } = current;
+  const { sourceUrl: _old, moveReason: _oldReason, ...rest } = current;
   const nextUrl = edit.sourceUrl !== undefined ? url : current.sourceUrl;
-  const skill: Skill = { ...rest, ...changes, ...(nextUrl ? { sourceUrl: nextUrl } : {}), updatedAt: now.toISOString() };
+  const skill: Skill = { ...rest, ...changes, ...(nextUrl ? { sourceUrl: nextUrl } : {}), ...(moveReason ? { moveReason } : {}), updatedAt: now.toISOString() };
   return { skills: skills.map((item) => (item === current ? skill : item)), skill };
 }
 
@@ -252,8 +262,8 @@ export function linkOf(skill: Skill): string | null {
 
 /** A text in lowercase with no accents, to compare names the way the User types them. */
 const plain = (value: string) => value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
-const record = (value: unknown): Record<string, unknown> => (value && typeof value === "object" ? (value as Record<string, unknown>) : {});
-const text = (value: unknown) => (typeof value === "string" ? value : undefined);
+export const record = (value: unknown): Record<string, unknown> => (value && typeof value === "object" ? (value as Record<string, unknown>) : {});
+export const text = (value: unknown) => (typeof value === "string" ? value : undefined);
 const date = (value: unknown) => (typeof value === "string" && !Number.isNaN(Date.parse(value)) ? new Date(value).toISOString() : undefined);
-const integerBetween = (value: unknown, min: number, max: number) =>
+export const integerBetween = (value: unknown, min: number, max: number) =>
   typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : undefined;

@@ -1,7 +1,7 @@
 // What the Module knows of GitHub: which URLs are those of a skill (a folder with a `SKILL.md`), the URLs it builds from
 // them, and the reading of the name and the description a `SKILL.md` holds in its frontmatter.
 
-import { addSkill, editSkill, type Draft, type Skill, type SkillEdit } from "./skills.ts";
+import { addSkill, editSkill, type Draft, type Ring, type Skill, type SkillEdit } from "./skills.ts";
 
 export interface ParsedSkillUrl {
   owner: string;
@@ -164,10 +164,11 @@ export function editUnlessDuplicate(
   id: string,
   edit: SkillEdit,
   now: Date,
+  publishedRing?: Ring,
 ): ReturnType<typeof editSkill> | { duplicate: Skill } {
   if (!skills.some((skill) => skill.id === id)) return null;
   const duplicate = edit.sourceUrl === undefined ? undefined : findDuplicate(skills.filter((skill) => skill.id !== id), edit.sourceUrl);
-  return duplicate ? { duplicate } : editSkill(skills, id, edit, now);
+  return duplicate ? { duplicate } : editSkill(skills, id, edit, now, publishedRing);
 }
 
 export type FetchedSkill = { ok: true; name: string; description: string } | { ok: false; reason: "not_found" | "network" };

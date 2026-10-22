@@ -3,7 +3,7 @@
 // (CONVENTION.md §4). Skills that could not be read cannot be changed, so that an empty list never overwrites them.
 
 import type { ConnectedModule } from "@tessello/sdk";
-import type { ComparedEdition } from "./changes.ts";
+import { type Edition, publishEdition, publishedRing, summaryOf, withoutReasons } from "./editions.ts";
 import { addUnlessDuplicate, editUnlessDuplicate } from "./github.ts";
 import { t } from "./i18n.ts";
 import { DEFAULT_QUADRANTS, deleteSkill, type Draft, type Filters, renameQuadrant as renamed, type Settings, type Skill, type SkillEdit, type Tab } from "./skills.ts";
@@ -13,8 +13,11 @@ export const skills = $state<{ list: Skill[] }>({ list: [] });
 
 export const settings = $state<Settings>({ quadrants: [...DEFAULT_QUADRANTS], tab: "library", filters: { rings: [], quadrants: [], query: "", archived: false } });
 
-/** The published editions, which decide what changed since the last one, and what can be deleted: a skill that is in one is kept. */
-export const editions = $state<{ published: ComparedEdition[] }>({ published: [] });
+/**
+ * The published editions, newest first, which decide what changed since the last one, and what can be deleted: a skill
+ * that is in one is kept.
+ */
+export const editions = $state<{ published: Edition[] }>({ published: [] });
 
 export const status = $state({
   /** False until the skills are read, and again while they cannot be read. */
@@ -35,11 +38,12 @@ export function connectStore(host: ConnectedModule): void {
 /** Reads the skills. A list whose last change could not be saved stays as it is on screen. */
 export async function load(): Promise<void> {
   try {
-    const [stored, storedSettings] = await Promise.all([storage.read(), storage.readSettings()]);
+    const [stored, storedSettings, published] = await Promise.all([storage.read(), storage.readSettings(), storage.readEditions()]);
     if (!status.saveError) {
       skills.list = stored;
       Object.assign(settings, storedSettings);
     }
+    editions.published = published;
     status.loadError = "";
     status.loaded = true;
   } catch (error) {
@@ -98,7 +102,7 @@ export function setTab(tab: Tab): void {
  */
 export function edit(id: string, change: SkillEdit): ReturnType<typeof editUnlessDuplicate> {
   if (!status.loaded) return null;
-  const result = editUnlessDuplicate(skills.list, id, change, new Date());
+  const result = editUnlessDuplicate(skills.list, id, change, new Date(), publishedRing(id, editions.published));
   if (result && "skill" in result) {
     skills.list = result.skills;
     void save();
@@ -131,4 +135,29 @@ export function setFilters(filters: Filters): void {
   if (!status.loaded) return;
   settings.filters = filters;
   void saveSettings();
+}
+
+/**
+ * Publishes the next edition with the introduction `intro`: the edition is written, then the index, then the skills
+ * without their explanations of a move. Nothing is published when the introduction is blank, when a moved skill is not
+ * explained (they are returned), or when the edition cannot be written (why, for the User, is returned).
+ */
+export async function publish(intro: string): Promise<{ published: Edition } | { error: "intro_required" } | { missing: Skill[] } | { failed: string } | null> {
+  if (!status.loaded) return null;
+  const result = publishEdition(skills.list, settings.quadrants, editions.published, intro, new Date());
+  if ("error" in result) return result.error === "reasons_missing" ? { missing: result.missing } : { error: result.error };
+  const index = [result.summary, ...editions.published.map(summaryOf)];
+  try {
+    await storage.writeEdition(result.edition, index);
+  } catch (error) {
+    // What the Host said, not the message of a failed save, which speaks of a change kept on screen.
+    const cause = (error as Error).cause ?? error;
+    const quota = (cause as { code?: unknown }).code === "quota_exceeded";
+    return { failed: quota ? t("publish_failed_quota") : t("publish_failed", { reason: reasonOf(cause) }) };
+  }
+  editions.published = [result.edition, ...editions.published];
+  // The skills as they are now, since the User may have changed one while the edition was written.
+  skills.list = withoutReasons(skills.list);
+  void save();
+  return { published: result.edition };
 }

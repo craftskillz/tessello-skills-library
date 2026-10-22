@@ -4,6 +4,7 @@
   import { t, type MessageKey } from "../lib/i18n.ts";
   import { type Filters, filterSkills, linkOf, newestFirst, type Ring, RINGS, type Skill, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX, QUADRANT_NAME_MAX } from "../lib/skills.ts";
   import { add, load, renameQuadrant, setFilters, setTab, settings, skills, status } from "../lib/store.svelte.ts";
+  import EditionsTab from "./EditionsTab.svelte";
   import EditPanel from "./EditPanel.svelte";
   import Modal from "./Modal.svelte";
   import RadarTab from "./RadarTab.svelte";
@@ -303,7 +304,7 @@
       {:else if settings.tab === "radar"}
         <RadarTab onOpen={openFromRadar} />
       {:else}
-        <p class="sl-message">{t("coming_soon")}</p>
+        <EditionsTab />
       {/if}
     </div>
   {/if}

@@ -2,6 +2,7 @@
   // The side panel where the User gives a verdict on a skill. Each change is saved at once; what is refused is said
   // under its field, and the field keeps what was typed.
   import { t, type MessageKey } from "../lib/i18n.ts";
+  import { publishedRing, REASON_MAX } from "../lib/editions.ts";
   import { canDelete, DESCRIPTION_MAX, NAME_MAX, RINGS, type SkillEdit } from "../lib/skills.ts";
   import { edit, editions, remove, settings, skills } from "../lib/store.svelte.ts";
   import Modal from "./Modal.svelte";
@@ -20,7 +21,24 @@
   let description = $state(skill?.description ?? "");
   // svelte-ignore state_referenced_locally
   let notes = $state(skill?.notes ?? "");
-  let errors = $state({ name: "", url: "", notes: "" });
+  // svelte-ignore state_referenced_locally
+  let reason = $state(skill?.moveReason ?? "");
+  let errors = $state({ name: "", url: "", notes: "", reason: "" });
+
+  /** Whether the ring differs from the one the last edition published, which asks for an explanation; an archived skill is retired instead. */
+  const moved = $derived.by(() => {
+    const published = publishedRing(id, editions.published);
+    return published !== undefined && skill !== undefined && !skill.archived && published !== skill.ring;
+  });
+
+  // While the field is hidden it follows the saved explanation: none after a move back to the published ring, so that
+  // moving away again starts from an empty field, and the one kept while the skill was archived when it comes back.
+  $effect(() => {
+    if (!moved) {
+      reason = skill?.moveReason ?? "";
+      errors.reason = "";
+    }
+  });
 
   const titleId = `panel-${Math.random().toString(36).slice(2)}`;
   let panel = $state<HTMLElement>();
@@ -30,14 +48,14 @@
   });
 
   /** Saves a change; the message of the field it was refused for, if any. */
-  function save(change: SkillEdit): "name_required" | "notes_too_long" | "url_taken" | "" {
+  function save(change: SkillEdit): "name_required" | "notes_too_long" | "reason_too_long" | "url_taken" | "" {
     const result = edit(id, change);
     if (!result) return "";
     if ("duplicate" in result) return "url_taken";
     return "error" in result ? result.error : "";
   }
 
-  const refuse = (key: "name" | "url" | "notes", reason: string) => (errors[key] = reason ? t(reason as MessageKey) : "");
+  const refuse = (key: "name" | "url" | "notes" | "reason", message: string) => (errors[key] = message ? t(message as MessageKey) : "");
 
   let savedUrl = $derived(skill?.sourceUrl ?? "");
   function commitUrl() {
@@ -152,6 +170,19 @@
         ></textarea>
         {#if errors.notes}<span class="sl-error" role="alert">{errors.notes}</span>{/if}
       </label>
+      {#if moved}
+        <label>
+          {t("why_moved")}
+          <textarea
+            rows="3"
+            maxlength={REASON_MAX}
+            aria-invalid={errors.reason ? "true" : undefined}
+            bind:value={reason}
+            oninput={() => refuse("reason", save({ moveReason: reason }))}
+          ></textarea>
+          {#if errors.reason}<span class="sl-error" role="alert">{errors.reason}</span>{/if}
+        </label>
+      {/if}
       <div class="sl-panel-actions">
         <button type="button" class="sl-btn" onclick={() => save({ archived: !skill.archived })}>
           {skill.archived ? t("unarchive") : t("archive")}

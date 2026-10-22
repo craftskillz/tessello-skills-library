@@ -39,7 +39,7 @@ Each change is saved as you make it. Close the panel with **Close** or Escape. A
 
 At the bottom of a skill's panel, **Archive** takes the skill off the **Library** without losing what you wrote about it. Archived skills are hidden unless you turn on **Show archived** above the list, where they appear greyed and tagged **Archived**; the page remembers the switch. **Unarchive** puts a skill back. An archived skill still counts for duplicates: adding its URL again shows it, with the switch turned on.
 
-**Delete** removes a skill for good, after you confirm. It only appears for a skill that is in no edition, so a skill you published is archived instead.
+**Delete** removes a skill for good, after you confirm. It only appears for a skill that is in no edition: a skill you published offers **Archive** only.
 
 ## Renaming the quadrants
 
@@ -59,10 +59,18 @@ Click a dot, or a line of the legend, to open the skill in the **Library**.
 
 Under the legend, **N changes waiting** lists what the next edition would announce: new skills, skills back, skills moved (**Moved: Try → Recommended**) and skills retired (**Retired (was Watch)**). Click one to open it; a retired skill is archived, so the **Library** turns on **Show archived** to show it. Until you have published an edition, every skill is new.
 
+## Publishing an edition
+
+An edition freezes your radar under a number and a date, with an introduction. In the **Radar** tab, click **Publish edition 1** (the number is always the next one). Write the **Introduction** in Markdown (it is required), click **Next**, then **Publish**. A published edition cannot be changed afterwards. If it cannot be saved, the dialog says why and nothing is published.
+
+Once an edition is published, the changes waiting are counted from it. When the ring of a skill differs from the one in the last edition, its panel asks **Why did it move?** (up to 280 characters). Moving the skill back to its published ring removes the question and what you wrote.
+
+While a moved skill has no explanation, the dialog lists those skills instead of publishing: click one to open its panel and write it. Publishing erases the explanations, which the edition keeps.
+
 ## The tabs
 
 - **Library** lists your skills, the newest first, with their ring, their stars and their quadrant.
 - **Radar** draws your skills as a radar, with the changes waiting to be published.
-- **Editions** is coming soon.
+- **Editions** lists the editions you published, the newest first: its number, its date and how many skills it holds in each ring. An edition is never changed.
 
 The page remembers the tab you left it on.
