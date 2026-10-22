@@ -97,8 +97,10 @@ const en = {
   editions_empty: "No edition yet. Publish one from the Radar.",
 
   module_name: "Skills Library",
-  widget_count: "{count} skills",
-  widget_count_one: "1 skill",
+  widget_last_edition: "Last edition: {date}",
+  widget_no_edition: "No edition yet",
+  widget_changes: "{count} changes waiting",
+  widget_changes_one: "1 change waiting",
   widget_open: "Open",
   widget_error: "Your skills could not be read.",
 
@@ -205,8 +207,10 @@ const fr: Messages = {
   editions_empty: "Aucune édition pour l'instant. Publiez-en une depuis le Radar.",
 
   module_name: "Skills Library",
-  widget_count: "{count} skills",
-  widget_count_one: "1 skill",
+  widget_last_edition: "Dernière édition : {date}",
+  widget_no_edition: "Pas encore d'édition",
+  widget_changes: "{count} changements en attente",
+  widget_changes_one: "1 changement en attente",
   widget_open: "Ouvrir",
   widget_error: "Vos skills n'ont pas pu être lues.",
 

@@ -2,20 +2,22 @@
   import type { ConnectedModule } from "@tessello/sdk";
   import { onMount } from "svelte";
   import { t } from "../lib/i18n.ts";
+  import { RINGS } from "../lib/skills.ts";
   import { skillStorage } from "../lib/storage.ts";
+  import { widgetSummary, type WidgetSummary } from "../lib/widget.ts";
 
   let { host }: { host: ConnectedModule } = $props();
 
   const storage = $derived(skillStorage(host.storage));
+  const lang = document.documentElement.lang || undefined;
 
-  let count = $state(0);
-  let loaded = $state(false);
+  let summary = $state<WidgetSummary | null>(null);
   let error = $state("");
 
   async function refresh() {
     try {
-      count = (await storage.read()).filter((skill) => !skill.archived).length;
-      loaded = true;
+      const [skills, editions] = await Promise.all([storage.read(), storage.readEditions()]);
+      summary = widgetSummary(skills, editions);
       error = "";
     } catch {
       error = t("widget_error");
@@ -39,8 +41,20 @@
     <p class="error" role="alert">{error}</p>
   {/if}
 
-  {#if loaded}
-    <p class="count">{count === 1 ? t("widget_count_one") : t("widget_count", { count })}</p>
+  {#if summary}
+    <ul class="rings">
+      {#each RINGS as ring (ring)}
+        <li><span class="ring">{t(`ring_${ring}`)}</span><strong>{summary.counts[ring]}</strong></li>
+      {/each}
+    </ul>
+    <p class="line">
+      {summary.lastPublishedAt
+        ? t("widget_last_edition", { date: new Intl.DateTimeFormat(lang, { dateStyle: "long" }).format(new Date(summary.lastPublishedAt)) })
+        : t("widget_no_edition")}
+    </p>
+    {#if summary.pending > 0}
+      <p class="line pending">{summary.pending === 1 ? t("widget_changes_one") : t("widget_changes", { count: summary.pending })}</p>
+    {/if}
   {/if}
 </div>
 
@@ -88,9 +102,31 @@
     margin: 0;
     color: var(--red);
   }
-  .count {
+  .rings {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 12px;
     margin: 0;
-    font-size: 20px;
+    padding: 0;
+    list-style: none;
+  }
+  .rings li {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    min-width: 0;
+  }
+  .ring {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .line {
+    margin: 0;
+    color: var(--muted);
+  }
+  .pending {
+    color: var(--accent-strong);
     font-weight: 700;
   }
 </style>

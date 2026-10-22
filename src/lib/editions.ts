@@ -209,6 +209,7 @@ function readAll<T extends { id: string }>(stored: unknown, read: (item: unknown
   return items;
 }
 
-const emptyCounts = (): Record<Ring, number> => ({ recommended: 0, try: 0, watch: 0, deprecated: 0 });
+/** A count of zero for each ring. */
+export const emptyCounts = (): Record<Ring, number> => ({ recommended: 0, try: 0, watch: 0, deprecated: 0 });
 /** A date as it was stored, when it can be read: an edition is kept as it was published. */
 const readableDate = (value: unknown) => (typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : undefined);

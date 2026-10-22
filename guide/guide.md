@@ -67,6 +67,10 @@ Once an edition is published, the changes waiting are counted from it. When the 
 
 While a moved skill has no explanation, the dialog lists those skills instead of publishing: click one to open its panel and write it. Publishing erases the explanations, which the edition keeps.
 
+## The widget
+
+The Home shows how many skills each ring holds (archived skills are left out), the date of the last edition (or "No edition yet") and, when there are any, how many changes are waiting to be published. **Open** brings you to the page. The widget reads your skills again each time the Home comes back.
+
 ## The tabs
 
 - **Library** lists your skills, the newest first, with their ring, their stars and their quadrant.

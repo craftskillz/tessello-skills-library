@@ -1,4 +1,4 @@
-// The Widget (size M): how many skills the Library holds, and a way to open the View.
+// The Widget (size M): the skills per Ring, the last Edition, the changes waiting, and a way to open the View.
 
 import { connect } from "@tessello/sdk";
 import { mount } from "svelte";
