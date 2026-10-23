@@ -60,8 +60,8 @@ describe("adding a set by hand", () => {
     assert.equal(result?.set, result?.sets[0]);
   });
 
-  test("the template of a new skill is the one of the spec, in French because the notes are published as they are", () => {
-    assert.equal(NOTES_TEMPLATE, "#### À quoi ça sert\n\n#### Pourquoi\n\n#### Comment\n");
+  test("the template of a new skill is the one of the spec, in English like the Module", () => {
+    assert.equal(NOTES_TEMPLATE, "#### What it's for\n\n#### Why\n\n#### How\n\n#### Suggestions for improvement\n");
   });
 
   test("a blank url is no url, and a missing description is an empty one", () => {

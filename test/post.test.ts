@@ -143,7 +143,7 @@ describe("what moves", () => {
   });
 
   test("leaves out the notes of a skill that are empty or reduced to the template", () => {
-    const template = "#### À quoi ça sert\n\n#### Pourquoi\n\n#### Comment\n";
+    const template = "#### What it's for\n\n#### Why\n\n#### How\n\n#### Suggestions for improvement\n";
     const body = bodyOf(
       edition({}, entry("a", { skills: [skill("s1", { name: "Empty" }), skill("s2", { name: "Spaces", notes: " \n\n" }), skill("s3", { name: "Template", notes: template }), skill("s4", { name: "Variant", notes: "# One\n   \n\n## Two\n" })] })),
     );

@@ -49,8 +49,8 @@ export interface SkillSet {
   moveReason?: string;
 }
 
-/** The notes of a new skill. In French on purpose: the notes are published as they are. */
-export const NOTES_TEMPLATE = "#### À quoi ça sert\n\n#### Pourquoi\n\n#### Comment\n";
+/** The notes of a new skill. They are published as they are, so the post shows these headings when they are filled. */
+export const NOTES_TEMPLATE = "#### What it's for\n\n#### Why\n\n#### How\n\n#### Suggestions for improvement\n";
 
 /** The longest name and description the View accepts. */
 export const NAME_MAX = 100;
