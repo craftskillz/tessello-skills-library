@@ -4,7 +4,7 @@
 import type { SkillChanges } from "./changes.ts";
 import type { Edition, EditionEntry, EditionSkill } from "./editions.ts";
 import { numberEntries, renderRadar, stars, type RadarLabels } from "./radar.ts";
-import { RINGS, type Ring } from "./skills.ts";
+import { RINGS, type Ring, setTopics } from "./skills.ts";
 
 /** The words of the post, which is written in French; the cover speaks the same. */
 const FRENCH_RINGS: Record<Ring, string> = { recommended: "Recommandé", try: "À essayer", watch: "À surveiller", deprecated: "Déconseillé" };
@@ -115,9 +115,12 @@ function compactList(entries: Numbered[]): string {
 /** The name of the topic of a skill; the last name when the topic is out of range. */
 const topicName = (topics: readonly string[], topic: number) => topics[topic] ?? topics[topics.length - 1] ?? "";
 
-/** The topics of the skills of a set for its legend line: " · " then the distinct names, in the order of the topics; nothing for a set with no skill. */
+/**
+ * The topics of the skills of a set for its legend line: " · " then their names, in the order of the topics, each once
+ * even when two topics have the same name; nothing for a set with no skill.
+ */
 function legendTopics(entry: EditionEntry, topics: readonly string[]): string {
-  const names = [...new Set(entry.skills.map((skill) => skill.topic))].sort((a, b) => a - b).map((topic) => markdownText(topicName(topics, topic)));
+  const names = setTopics(entry).map((topic) => markdownText(topicName(topics, topic)));
   return names.length > 0 ? ` · ${[...new Set(names)].join(", ")}` : "";
 }
 

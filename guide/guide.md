@@ -89,7 +89,7 @@ At the bottom of a set's panel, **Archive** takes the set off the **Library** wi
 
 ## The radar
 
-The **Radar** tab draws the radar of your next edition: every set that is not archived, as numbered points. The ring of the set gives the distance from the centre (Recommended, Try, Watch, Deprecated, from the centre outwards), and the topic gives the sector and the colour.
+The **Radar** tab draws the radar of your next edition: every set that is not archived and holds at least one skill, as numbered points. The ring of the set gives the distance from the centre (Recommended, Try, Watch, Deprecated, from the centre outwards), and the topic gives the sector and the colour.
 
 A set has **one point for each topic its skills are in**. All its points carry the same number, the same ring and the same marker, and sit in the sector of their own topic. A set with skills in two topics has two points; a set with a single topic has one. A set without a skill is not on the radar. A point stays where it is until you change the ring of its set or the topic of a skill.
 
@@ -117,7 +117,7 @@ The **Editions** tab lists the editions you published, the newest first: its num
 
 ## The widget
 
-The Home shows how many sets each ring holds (archived sets are left out), the date of the last edition (or "No edition yet") and, when there are any, how many changes are waiting to be published. **Open** brings you to the page. The widget reads your sets again each time the Home comes back.
+The Home shows how many sets each ring holds (archived sets, and sets without a skill, are left out), the date of the last edition (or "No edition yet") and, when there are any, how many changes are waiting to be published. **Open** brings you to the page. The widget reads your sets again each time the Home comes back.
 
 ## The tabs
 

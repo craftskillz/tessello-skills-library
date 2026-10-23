@@ -263,7 +263,7 @@ interface Dot {
  * The centre of each point by set id and topic. A point draws its candidates from a stream seeded by its id and its topic, inside its sector and ring;
  * the first one clear of the boundaries of its sector and the ring boundaries is its own place. The points are placed in the order of their
  * numbers, then of their topics: when a place is too close to a point already placed it takes the next candidate, and when none is free it takes
- * the one farthest from the others. So a set keeps its place in a topic whatever the other cells hold.
+ * the one farthest from the others. So a set keeps its place in a topic unless a dot numbered before it took that place.
  */
 function place(dots: readonly Dot[], count: number): Map<string, Point> {
   const placed = new Map<string, Point>();

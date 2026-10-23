@@ -1,5 +1,5 @@
-// The sets in the Host storage (CONVENTION.md §6.1): the whole list under `sets` (the old `skills` are migrated once, never touched; so is a `quadrant` of a set, which goes to its skills), and the settings of the View under
-// `settings`. What is stored is read defensively (skills.ts), and a failed write comes back as a message for the User.
+// The sets in the Host storage (CONVENTION.md §6.1): the whole list under `sets` (the old `skills` are migrated once, never
+// touched; the `quadrant` of a set goes to its skills, once), and the settings of the View under `settings`. What is stored is read defensively (skills.ts), and a failed write comes back as a message for the User.
 
 import type { Json, Storage } from "@tessello/sdk";
 import { readEdition, readEditionIndex, type Edition, type EditionSummary } from "./editions.ts";
