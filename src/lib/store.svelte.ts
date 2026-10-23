@@ -118,16 +118,18 @@ export function importSet(draft: { name: string; url: string }, skills: readonly
 /**
  * Looks again for the skills under the url of the set and merges them into it, as `refreshSet` does, then saves it. The
  * merge is made on the sets as they are when the answer comes, since the User may have changed one meanwhile. Why not, when
- * the set has no GitHub url or GitHub could not be read: nothing is changed then. Null while the sets cannot be read or
+ * the set has no GitHub url, GitHub could not be read or no skill is found there any more (a folder that moved, more likely
+ * than a set whose every skill was removed): nothing is changed then. Null while the sets cannot be read or
  * when there is no such set.
  */
-export async function refreshSet(id: string): Promise<{ added: number; gone: number } | { error: "not_a_skill_url" | "not_found" | "rate_limited" | "network" } | null> {
+export async function refreshSet(id: string): Promise<{ added: number; gone: number } | { error: "not_a_skill_url" | "not_found" | "rate_limited" | "network" | "empty" } | null> {
   if (!status.loaded) return null;
   const parsed = parseSkillUrl(sets.list.find((set) => set.id === id)?.sourceUrl ?? "");
   if (!parsed) return sets.list.some((set) => set.id === id) ? { error: "not_a_skill_url" } : null;
   const found = await discoverSkills(parsed);
   if (found.kind === "error") return { error: found.reason };
-  const skills = found.kind === "set" ? found.skills : found.kind === "single" ? [found.skill] : [];
+  if (found.kind === "empty") return { error: "empty" };
+  const skills = found.kind === "set" ? found.skills : [found.skill];
   const result = refreshSetOf(sets.list, id, skills, new Date(), () => crypto.randomUUID());
   if (!result) return null;
   if (result.sets !== sets.list) {

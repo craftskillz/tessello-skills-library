@@ -101,7 +101,7 @@
   // The refresh from GitHub: whether it is under way, and what it said.
   let refreshing = $state(false);
   let refreshed = $state({ text: "", failed: false });
-  const failures = { not_a_skill_url: "not_a_skill_url", not_found: "url_not_found", rate_limited: "rate_limited", network: "url_unreadable" } as const;
+  const failures = { not_a_skill_url: "not_a_skill_url", not_found: "url_not_found", rate_limited: "rate_limited", network: "url_unreadable", empty: "refresh_empty" } as const;
   /** The refresh button needs the url the set has saved, not the one being typed. */
   const refreshable = $derived(parseSkillUrl(set?.sourceUrl ?? "") !== null);
 

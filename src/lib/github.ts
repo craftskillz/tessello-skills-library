@@ -14,6 +14,8 @@ export interface ParsedSkillUrl {
   rawUrl: string;
   /** The folder of the skill on github.com. */
   sourceUrl: string;
+  /** Whether the URL names the `SKILL.md` itself rather than a folder: then it can only be that one skill. */
+  namesFile: boolean;
 }
 
 const FILE = "SKILL.md";
@@ -36,22 +38,22 @@ export function parseSkillUrl(text: string): ParsedSkillUrl | null {
   const repo = rawRepo.replace(/\.git$/, "");
   if (!repo) return null;
   if (GITHUB_HOSTS.has(url.hostname)) {
-    if (segments.length === 2) return build(owner, repo, "HEAD", []);
+    if (segments.length === 2) return build(owner, repo, "HEAD", [], false);
     if (!ref) return null;
-    if (kind === "tree") return build(owner, repo, ref, rest);
-    if (kind === "blob" && rest.at(-1) === FILE) return build(owner, repo, ref, rest.slice(0, -1));
+    if (kind === "tree") return build(owner, repo, ref, rest, false);
+    if (kind === "blob" && rest.at(-1) === FILE) return build(owner, repo, ref, rest.slice(0, -1), true);
     return null;
   }
   if (url.hostname === RAW_HOST) {
     // Here the third segment is the ref, so the rest starts one segment earlier.
     const [, , branch, ...path] = segments;
     if (!branch || path.at(-1) !== FILE) return null;
-    return build(owner, repo, branch, path.slice(0, -1));
+    return build(owner, repo, branch, path.slice(0, -1), true);
   }
   return null;
 }
 
-function build(owner: string, repo: string, ref: string, segments: string[]): ParsedSkillUrl {
+function build(owner: string, repo: string, ref: string, segments: string[], namesFile: boolean): ParsedSkillUrl {
   const path = segments.join("/");
   const folder = path ? `/${path}` : "";
   const repoUrl = `https://github.com/${owner}/${repo}`;
@@ -62,6 +64,7 @@ function build(owner: string, repo: string, ref: string, segments: string[]): Pa
     path,
     rawUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${ref}${folder}/${FILE}`,
     sourceUrl: !path && ref === "HEAD" ? repoUrl : `${repoUrl}/tree/${ref}${folder}`,
+    namesFile,
   };
 }
 
@@ -205,7 +208,8 @@ export type Discovery =
 const MAX_IN_FLIGHT = 6;
 
 /**
- * What a GitHub URL holds. A folder with a `SKILL.md` is a single skill and its subfolders are not looked at. Otherwise
+ * What a GitHub URL holds. A folder with a `SKILL.md` is a single skill and its subfolders are not looked at; the URL of a
+ * `SKILL.md` that is not there is not found, and its folder is not listed. Otherwise
  * the folder is listed and each of its subfolders with a `SKILL.md` is a skill of a set, in the order of the listing, one
  * level only; the subfolders with none are ignored, and no skill at all is empty. A listing that is not found, that the
  * rate limit refuses, or any failure on the way is an error and nothing is kept.
@@ -213,12 +217,12 @@ const MAX_IN_FLIGHT = 6;
 export async function discoverSkills(parsed: ParsedSkillUrl, fetchFn: typeof fetch = fetch): Promise<Discovery> {
   const own = await fetchSkill(parsed, fetchFn);
   if (own.ok) return { kind: "single", skill: { name: own.name, description: own.description, sourceUrl: parsed.sourceUrl } };
-  if (own.reason === "network") return { kind: "error", reason: "network" };
+  if (own.reason === "network" || parsed.namesFile) return { kind: "error", reason: own.reason };
 
   const listing = await listFolders(parsed, fetchFn);
   if ("reason" in listing) return { kind: "error", reason: listing.reason };
 
-  const children = listing.folders.map((folder) => build(parsed.owner, parsed.repo, parsed.ref, [...(parsed.path ? parsed.path.split("/") : []), folder]));
+  const children = listing.folders.map((folder) => build(parsed.owner, parsed.repo, parsed.ref, [...(parsed.path ? parsed.path.split("/") : []), folder], false));
   const fetched = await mapLimited(children, MAX_IN_FLIGHT, (child) => fetchSkill(child, fetchFn));
   const skills: DiscoveredSkill[] = [];
   for (const [index, result] of fetched.entries()) {

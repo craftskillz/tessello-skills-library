@@ -10,26 +10,29 @@ const tdd = {
   path: "tdd",
   rawUrl: "https://raw.githubusercontent.com/acme/skills/main/tdd/SKILL.md",
   sourceUrl: "https://github.com/acme/skills/tree/main/tdd",
+  namesFile: false,
 };
+const tddFile = { ...tdd, namesFile: true };
 
 describe("recognizing a skill on GitHub in what the User pastes", () => {
-  test("every form of the file or the folder, with or without https:// and www.", () => {
+  test("every form of the file or the folder, with or without https:// and www.; only the file names the SKILL.md", () => {
     for (const url of [
       "https://github.com/acme/skills/blob/main/tdd/SKILL.md",
       "github.com/acme/skills/blob/main/tdd/SKILL.md",
       "www.github.com/acme/skills/blob/main/tdd/SKILL.md",
       "http://github.com/acme/skills/blob/main/tdd/SKILL.md",
-      "https://github.com/acme/skills/tree/main/tdd",
-      "https://github.com/acme/skills/tree/main/tdd/",
       "https://raw.githubusercontent.com/acme/skills/main/tdd/SKILL.md",
       "raw.githubusercontent.com/acme/skills/main/tdd/SKILL.md",
     ]) {
+      assert.deepEqual(parseSkillUrl(url), tddFile, url);
+    }
+    for (const url of ["https://github.com/acme/skills/tree/main/tdd", "https://github.com/acme/skills/tree/main/tdd/"]) {
       assert.deepEqual(parseSkillUrl(url), tdd, url);
     }
   });
 
   test("ignores the spaces around, the query string and the fragment", () => {
-    assert.deepEqual(parseSkillUrl("  https://github.com/acme/skills/blob/main/tdd/SKILL.md?plain=1#L10 \n"), tdd);
+    assert.deepEqual(parseSkillUrl("  https://github.com/acme/skills/blob/main/tdd/SKILL.md?plain=1#L10 \n"), tddFile);
   });
 
   test("a nested path is kept without its slashes at the ends", () => {
@@ -40,6 +43,7 @@ describe("recognizing a skill on GitHub in what the User pastes", () => {
       path: "a/b/c",
       rawUrl: "https://raw.githubusercontent.com/acme/skills/main/a/b/c/SKILL.md",
       sourceUrl: "https://github.com/acme/skills/tree/main/a/b/c",
+      namesFile: false,
     });
   });
 
@@ -51,6 +55,7 @@ describe("recognizing a skill on GitHub in what the User pastes", () => {
       path: "",
       rawUrl: "https://raw.githubusercontent.com/acme/skills/HEAD/SKILL.md",
       sourceUrl: "https://github.com/acme/skills",
+      namesFile: false,
     };
     for (const url of ["https://github.com/acme/skills", "github.com/acme/skills/", "https://github.com/acme/skills.git"]) {
       assert.deepEqual(parseSkillUrl(url), root, url);
@@ -65,13 +70,11 @@ describe("recognizing a skill on GitHub in what the User pastes", () => {
       path: "",
       rawUrl: "https://raw.githubusercontent.com/acme/skills/main/SKILL.md",
       sourceUrl: "https://github.com/acme/skills/tree/main",
+      namesFile: false,
     };
-    for (const url of [
-      "https://github.com/acme/skills/blob/main/SKILL.md",
-      "https://github.com/acme/skills/tree/main",
-      "https://raw.githubusercontent.com/acme/skills/main/SKILL.md",
-    ]) {
-      assert.deepEqual(parseSkillUrl(url), atMain, url);
+    assert.deepEqual(parseSkillUrl("https://github.com/acme/skills/tree/main"), atMain);
+    for (const url of ["https://github.com/acme/skills/blob/main/SKILL.md", "https://raw.githubusercontent.com/acme/skills/main/SKILL.md"]) {
+      assert.deepEqual(parseSkillUrl(url), { ...atMain, namesFile: true }, url);
     }
   });
 
@@ -336,6 +339,13 @@ describe("discovering the skills under a GitHub URL", () => {
       kind: "single",
       skill: { name: "tdd", description: "", sourceUrl: "https://github.com/obra/superpowers/tree/main/skills/tdd" },
     });
+  });
+
+  test("the URL of a SKILL.md that is not there is not found, and its folder is not listed", async () => {
+    const parsed = parseSkillUrl("https://github.com/obra/superpowers/blob/main/skills/tdd/SKILL.md")!;
+    const { asked, fetchFn } = github({ [API]: () => json([dir("tdd")]) });
+    assert.deepEqual(await discoverSkills(parsed, fetchFn), { kind: "error", reason: "not_found" });
+    assert.deepEqual(asked, [`${RAW}/tdd/SKILL.md`]);
   });
 
   test("a folder of skill folders is a set, in the order of the folders; files and folders with no SKILL.md are ignored", async () => {
