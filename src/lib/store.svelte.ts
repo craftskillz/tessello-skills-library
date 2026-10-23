@@ -4,7 +4,7 @@
 
 import type { ConnectedModule } from "@tessello/sdk";
 import { type Edition, publishEdition, publishedRing, summaryOf, withoutReasons } from "./editions.ts";
-import { addUnlessDuplicate, editUnlessDuplicate } from "./github.ts";
+import { addUnlessDuplicate, type DiscoveredSkill, discoverSkills, editUnlessDuplicate, importSet as importSetOf, parseSkillUrl, refreshSet as refreshSetOf } from "./github.ts";
 import { t } from "./i18n.ts";
 import {
   addSkillToSet,
@@ -104,20 +104,37 @@ export function addSet(draft: Draft): { added: SkillSet } | { duplicate: SkillSe
   return { added: result.set };
 }
 
-/**
- * Adds a set of one skill, which has the name, the url and the description of the draft (what pasting the url of a
- * `SKILL.md` makes); the url of the set is the key of the duplicates. The answers are `addSet`'s.
- */
-export function addSetOfOneSkill(draft: Draft): { added: SkillSet } | { duplicate: SkillSet } | null {
+/** Imports a set of the skills found under a GitHub URL and saves it; the answers are `importSet`'s, null too while the sets cannot be read. */
+export function importSet(draft: { name: string; url: string }, skills: readonly DiscoveredSkill[]): { added: SkillSet } | { duplicate: SkillSet } | null {
   if (!status.loaded) return null;
-  const result = addUnlessDuplicate(sets.list, draft, new Date(), crypto.randomUUID());
+  const result = importSetOf(sets.list, draft, skills, new Date(), () => crypto.randomUUID());
   if (!result) return null;
   if ("duplicate" in result) return result;
-  const withSkill = addSkillToSet(result.sets, result.set.id, draft, new Date(), crypto.randomUUID());
-  if (!withSkill || "error" in withSkill) return null;
-  sets.list = withSkill.sets;
+  sets.list = result.sets;
   void save();
-  return { added: withSkill.set };
+  return { added: result.set };
+}
+
+/**
+ * Looks again for the skills under the url of the set and merges them into it, as `refreshSet` does, then saves it. The
+ * merge is made on the sets as they are when the answer comes, since the User may have changed one meanwhile. Why not, when
+ * the set has no GitHub url or GitHub could not be read: nothing is changed then. Null while the sets cannot be read or
+ * when there is no such set.
+ */
+export async function refreshSet(id: string): Promise<{ added: number; gone: number } | { error: "not_a_skill_url" | "not_found" | "rate_limited" | "network" } | null> {
+  if (!status.loaded) return null;
+  const parsed = parseSkillUrl(sets.list.find((set) => set.id === id)?.sourceUrl ?? "");
+  if (!parsed) return sets.list.some((set) => set.id === id) ? { error: "not_a_skill_url" } : null;
+  const found = await discoverSkills(parsed);
+  if (found.kind === "error") return { error: found.reason };
+  const skills = found.kind === "set" ? found.skills : found.kind === "single" ? [found.skill] : [];
+  const result = refreshSetOf(sets.list, id, skills, new Date(), () => crypto.randomUUID());
+  if (!result) return null;
+  if (result.sets !== sets.list) {
+    sets.list = result.sets;
+    void save();
+  }
+  return { added: result.added, gone: result.gone };
 }
 
 /** Adds a skill at the end of a set and saves it; the answer is `addSkillToSet`'s, null too while the sets cannot be read. */

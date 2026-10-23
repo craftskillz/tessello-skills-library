@@ -14,6 +14,6 @@
     "size": "M"
   },
   "permissions": {
-    "network": ["https://raw.githubusercontent.com"]
+    "network": ["https://raw.githubusercontent.com", "https://api.github.com"]
   }
 }

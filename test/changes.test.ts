@@ -190,3 +190,21 @@ describe("the changes that wait to be published", () => {
     assert.equal(pendingCount(changesSince([set("a")], [edition(1, { id: "a" })])), 0);
   });
 });
+
+describe("the changes after a refresh from GitHub", () => {
+  const published = edition(1, { id: "a", skills: [{ id: "s1", name: "Skill s1", notes: "" }] });
+  const before = set("a", { skills: [member("s1", { sourceUrl: "https://github.com/o/r/tree/main/s1" })] });
+
+  test("a skill added makes the set updated, with the skill in added", () => {
+    const after = { ...before, skills: [...before.skills, member("s2")] };
+    assert.deepEqual(changesSince([after], [published]).get("a"), {
+      kind: "updated",
+      skills: { added: [{ id: "s2", name: "Skill s2" }], removed: [], scores: [] },
+    });
+  });
+
+  test("a skill gone upstream alone is unchanged", () => {
+    const after = { ...before, skills: [{ ...before.skills[0], goneUpstream: true }] };
+    assert.deepEqual(changesSince([after], [published]).get("a"), { kind: "unchanged" });
+  });
+});

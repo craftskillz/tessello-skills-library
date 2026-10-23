@@ -37,6 +37,7 @@
 <details class="sl-skill-section" {open} data-skill-section={skill.id}>
   <summary>
     <span class="sl-skill-title">{skill.name}</span>
+    {#if skill.goneUpstream}<span class="sl-skill-gone">{t("gone_upstream")}</span>{/if}
     {#if skill.score !== undefined}
       <span class="sl-skill-score" role="img" aria-label={t("stars", { score: skill.score })}>{"★".repeat(skill.score)}{"☆".repeat(5 - skill.score)}</span>
     {:else}
@@ -124,6 +125,13 @@
   .sl-skill-title {
     min-width: 0;
     overflow-wrap: anywhere;
+  }
+  .sl-skill-gone {
+    margin-left: auto;
+    font-weight: 400;
+    font-size: 12px;
+    color: var(--red);
+    white-space: nowrap;
   }
   .sl-skill-score {
     font-weight: 400;

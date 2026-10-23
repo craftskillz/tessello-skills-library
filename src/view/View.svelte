@@ -1,10 +1,10 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { changesSince } from "../lib/changes.ts";
-  import { fetchSkill, findDuplicate, parseSkillUrl } from "../lib/github.ts";
+  import { type DiscoveredSkill, discoverSkills, findDuplicate, parseSkillUrl } from "../lib/github.ts";
   import { t, type MessageKey } from "../lib/i18n.ts";
   import { type Filters, filterSets, linkOf, newestFirst, type Ring, RINGS, type SkillSet, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX, QUADRANT_NAME_MAX } from "../lib/skills.ts";
-  import { addSet, addSetOfOneSkill, editions, load, renameQuadrant, setFilters, setTab, sets, settings, status } from "../lib/store.svelte.ts";
+  import { addSet, editions, importSet, load, renameQuadrant, setFilters, setTab, sets, settings, status } from "../lib/store.svelte.ts";
   import { changeTag, skillCountLabel } from "./change-tag.ts";
   import EditionsTab from "./EditionsTab.svelte";
   import EditPanel from "./EditPanel.svelte";
@@ -95,7 +95,13 @@
     void show(set);
   }
 
-  /** Reads the skill at the URL and adds it as a set of one skill, unless it is there already; an error leaves the User to add it by hand. */
+  /** The skills found under a URL, waiting for the User to choose which to import and to name the set. */
+  let preview = $state<{ url: string; skills: DiscoveredSkill[]; checked: boolean[]; name: string } | null>(null);
+  const importable = $derived(preview !== null && preview.name.trim() !== "" && preview.checked.some(Boolean));
+
+  const failures = { not_found: "url_not_found", rate_limited: "rate_limited", network: "url_unreadable" } as const;
+
+  /** Looks for the skills at the URL and previews them, unless the set is there already; what cannot be read leaves the User to add it by hand. */
   async function addFromUrl(text: string) {
     if (!text.trim()) return;
     const mine = ++entry;
@@ -110,19 +116,29 @@
       return;
     }
     notice = { text: t("reading") };
-    const result = await fetchSkill(parsed);
+    const found = await discoverSkills(parsed);
     if (mine !== entry) return;
-    if (!result.ok) {
-      notice = { text: t(result.reason === "not_found" ? "skill_not_found" : "skill_unreadable"), manualUrl: parsed.sourceUrl };
-      return;
-    }
-    const outcome = addSetOfOneSkill({ name: result.name, url: parsed.sourceUrl, description: result.description });
-    if (!outcome) {
+    if (found.kind === "error") {
+      notice = { text: t(failures[found.reason]), manualUrl: parsed.sourceUrl };
+    } else if (found.kind === "empty") {
+      notice = { text: t("no_skill_found"), manualUrl: parsed.sourceUrl };
+    } else {
+      const skills = found.kind === "set" ? found.skills : [found.skill];
       notice = { text: "" };
-    } else if ("duplicate" in outcome) {
+      preview = { url: parsed.sourceUrl, skills, checked: skills.map(() => true), name: (found.kind === "set" ? parsed.repo : found.skill.name).slice(0, NAME_MAX) };
+    }
+  }
+
+  function submitImport(event: SubmitEvent) {
+    event.preventDefault();
+    if (!preview || !importable) return;
+    const chosen = preview.skills.filter((_, index) => preview!.checked[index]);
+    const outcome = importSet({ name: preview.name, url: preview.url }, chosen);
+    preview = null;
+    if (!outcome) return;
+    if ("duplicate" in outcome) {
       alreadyThere(outcome.duplicate);
     } else {
-      notice = { text: "" };
       pasted = "";
       void select(outcome.added);
     }
@@ -226,7 +242,7 @@
           {#if notice.text}
             <span>{notice.text}</span>
             {#if notice.manualUrl}
-              <button type="button" class="sl-btn" onclick={() => openForm(notice.manualUrl)}>{t("new_set")}</button>
+              <button type="button" class="sl-btn" onclick={() => openForm(notice.manualUrl)}>{t("continue_manually")}</button>
             {/if}
           {/if}
         </div>
@@ -339,6 +355,33 @@
     </div>
     {#snippet actions()}
       <button type="button" class="sl-btn sl-btn--primary" onclick={() => (renaming = false)}>{t("close")}</button>
+    {/snippet}
+  </Modal>
+
+  <Modal open={preview !== null} title={t("import_title")} onClose={() => (preview = null)}>
+    {#if preview}
+      <form id="sl-import-form" class="sl-form" onsubmit={submitImport}>
+        <label>
+          {t("set_name")}
+          <input type="text" required maxlength={NAME_MAX} autocomplete="off" bind:value={preview.name} />
+        </label>
+        <fieldset class="sl-found">
+          <legend>{t("import_found")}</legend>
+          {#each preview.skills as skill, index (skill.sourceUrl)}
+            <label class="sl-found-item">
+              <input type="checkbox" bind:checked={preview.checked[index]} />
+              <span>
+                <strong>{skill.name}</strong>
+                {#if skill.description}<small>{skill.description}</small>{/if}
+              </span>
+            </label>
+          {/each}
+        </fieldset>
+      </form>
+    {/if}
+    {#snippet actions()}
+      <button type="button" class="sl-btn" onclick={() => (preview = null)}>{t("cancel")}</button>
+      <button type="submit" form="sl-import-form" class="sl-btn sl-btn--primary" disabled={!importable}>{t("import")}</button>
     {/snippet}
   </Modal>
 
@@ -596,6 +639,34 @@
     background: var(--bg);
     color: var(--ink);
     font: inherit;
+  }
+  .sl-found {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .sl-found legend {
+    padding: 0;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .sl-form label.sl-found-item {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .sl-found-item span {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .sl-found-item small {
+    color: var(--muted);
   }
   .sl-form input:focus,
   .sl-form textarea:focus {

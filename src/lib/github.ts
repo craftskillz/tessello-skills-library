@@ -1,7 +1,7 @@
 // What the Module knows of GitHub: which URLs are those of a skill (a folder with a `SKILL.md`), the URLs it builds from
 // them, and the reading of the name and the description a `SKILL.md` holds in its frontmatter.
 
-import { addSet, editSet, type Draft, type Ring, type SetEdit, type SkillSet } from "./skills.ts";
+import { addSet, addSkillToSet, editSet, type Draft, type Ring, type SetEdit, type SkillSet } from "./skills.ts";
 
 export interface ParsedSkillUrl {
   owner: string;
@@ -186,4 +186,146 @@ export async function fetchSkill(parsed: ParsedSkillUrl, fetchFn: typeof fetch =
   }
   const { name, description } = readSkillFrontmatter(markdown);
   return { ok: true, name: name ?? defaultName(parsed), description: description ?? "" };
+}
+
+/** A skill found under a GitHub URL: what its SKILL.md says, and the folder it is in on github.com. */
+export interface DiscoveredSkill {
+  name: string;
+  description: string;
+  sourceUrl: string;
+}
+
+export type Discovery =
+  | { kind: "set"; skills: DiscoveredSkill[] }
+  | { kind: "single"; skill: DiscoveredSkill }
+  | { kind: "empty" }
+  | { kind: "error"; reason: "not_found" | "rate_limited" | "network" };
+
+/** How many `SKILL.md` are requested at once when the folders of a set are read. */
+const MAX_IN_FLIGHT = 6;
+
+/**
+ * What a GitHub URL holds. A folder with a `SKILL.md` is a single skill and its subfolders are not looked at. Otherwise
+ * the folder is listed and each of its subfolders with a `SKILL.md` is a skill of a set, in the order of the listing, one
+ * level only; the subfolders with none are ignored, and no skill at all is empty. A listing that is not found, that the
+ * rate limit refuses, or any failure on the way is an error and nothing is kept.
+ */
+export async function discoverSkills(parsed: ParsedSkillUrl, fetchFn: typeof fetch = fetch): Promise<Discovery> {
+  const own = await fetchSkill(parsed, fetchFn);
+  if (own.ok) return { kind: "single", skill: { name: own.name, description: own.description, sourceUrl: parsed.sourceUrl } };
+  if (own.reason === "network") return { kind: "error", reason: "network" };
+
+  const listing = await listFolders(parsed, fetchFn);
+  if ("reason" in listing) return { kind: "error", reason: listing.reason };
+
+  const children = listing.folders.map((folder) => build(parsed.owner, parsed.repo, parsed.ref, [...(parsed.path ? parsed.path.split("/") : []), folder]));
+  const fetched = await mapLimited(children, MAX_IN_FLIGHT, (child) => fetchSkill(child, fetchFn));
+  const skills: DiscoveredSkill[] = [];
+  for (const [index, result] of fetched.entries()) {
+    if (result.ok) skills.push({ name: result.name, description: result.description, sourceUrl: children[index].sourceUrl });
+    else if (result.reason === "network") return { kind: "error", reason: "network" };
+  }
+  return skills.length > 0 ? { kind: "set", skills } : { kind: "empty" };
+}
+
+/** The names of the subfolders of the folder, in the order GitHub lists them; why not, when it cannot be listed. */
+async function listFolders(parsed: ParsedSkillUrl, fetchFn: typeof fetch): Promise<{ folders: string[] } | { reason: "not_found" | "rate_limited" | "network" }> {
+  const query = parsed.ref === "HEAD" ? "" : `?ref=${encodeURIComponent(parsed.ref)}`;
+  const folder = parsed.path ? `/${parsed.path}` : "";
+  try {
+    const response = await fetchFn(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}/contents${folder}${query}`);
+    if (response.status === 404) return { reason: "not_found" };
+    if (response.status === 403 || response.status === 429) return { reason: "rate_limited" };
+    if (!response.ok) return { reason: "network" };
+    const entries: unknown = await response.json();
+    if (!Array.isArray(entries)) return { reason: "network" };
+    const folders = entries.flatMap((entry) => (entry?.type === "dir" && typeof entry.name === "string" ? [entry.name as string] : []));
+    return { folders };
+  } catch {
+    return { reason: "network" };
+  }
+}
+
+/** `map` with at most `limit` calls running at once; the results are in the order of the items. */
+async function mapLimited<T, R>(items: readonly T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await run(items[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+/**
+ * Adds a set named `draft.name`, whose url is `draft.url`, holding `skills` in their order; each is added as
+ * `addSkillToSet` does (not evaluated, the template as its notes, its folder as its url), and a skill whose url an earlier
+ * one has is left out. Null when the name is blank or there is no skill; the set, archived or not, that has the same url
+ * is the answer when there is one, and nothing is added then.
+ */
+export function importSet(
+  sets: readonly SkillSet[],
+  draft: { name: string; url: string },
+  skills: readonly DiscoveredSkill[],
+  now: Date,
+  newId: () => string,
+): { sets: SkillSet[]; set: SkillSet } | { duplicate: SkillSet } | null {
+  if (skills.length === 0) return null;
+  const added = addUnlessDuplicate(sets, draft, now, newId());
+  if (!added || "duplicate" in added) return added;
+  let result = added;
+  for (const skill of skills) {
+    const withSkill = addSkillToSet(result.sets, result.set.id, { name: skill.name, url: skill.sourceUrl, description: skill.description }, now, newId());
+    if (withSkill && !("error" in withSkill)) result = withSkill;
+  }
+  return result;
+}
+
+/**
+ * The set `setId` against the skills found again under its url. A skill found that no skill of the set has (by url) is
+ * added at the end as `addSkillToSet` does. A skill of the set whose url is in the folder of the set and is not found any
+ * more is marked `goneUpstream` and kept as it is; one found again loses the mark. A skill with no url, or from outside
+ * the folder of the set, is never marked, and the names, descriptions, scores and notes are never touched. `added` counts
+ * the skills added, `gone` those newly marked (not the ones that already were). Nothing to change gives the same sets back.
+ * Null when there is no such set.
+ */
+export function refreshSet(
+  sets: readonly SkillSet[],
+  setId: string,
+  found: readonly DiscoveredSkill[],
+  now: Date,
+  newId: () => string,
+): { sets: SkillSet[]; set: SkillSet; added: number; gone: number } | null {
+  const current = sets.find((set) => set.id === setId);
+  if (!current) return null;
+  const foundKeys = new Set(found.map((skill) => duplicateKey(skill.sourceUrl)));
+  const folder = duplicateKey(current.sourceUrl);
+  let gone = 0;
+  const skills = current.skills.map((skill) => {
+    const key = duplicateKey(skill.sourceUrl);
+    if (key === null || folder === null || !key.startsWith(`${folder}/`)) return skill;
+    const missing = !foundKeys.has(key);
+    if (missing === (skill.goneUpstream === true)) return skill;
+    if (missing) gone++;
+    const { goneUpstream: _, ...rest } = skill;
+    return missing ? { ...rest, goneUpstream: true } : rest;
+  });
+  const marked = gone > 0 || skills.some((skill, index) => skill !== current.skills[index]);
+  const set = marked ? { ...current, skills, updatedAt: now.toISOString() } : current;
+  let result = { sets: marked ? sets.map((item) => (item === current ? set : item)) : (sets as SkillSet[]), set };
+  let added = 0;
+  const have = new Set(current.skills.map((skill) => duplicateKey(skill.sourceUrl)));
+  for (const skill of found) {
+    // Not offered to `addSkillToSet` when the set has it, so that no id is spent on it.
+    if (have.has(duplicateKey(skill.sourceUrl))) continue;
+    const withSkill = addSkillToSet(result.sets, setId, { name: skill.name, url: skill.sourceUrl, description: skill.description }, now, newId());
+    if (withSkill && !("error" in withSkill)) {
+      result = withSkill;
+      added++;
+    }
+  }
+  return { ...result, added, gone };
 }

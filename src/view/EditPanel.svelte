@@ -2,9 +2,10 @@
   // The side panel where the User gives a verdict on a set and works on its skills. Each change is saved at once; what is refused is said
   // under its field, and the field keeps what was typed.
   import { t, type MessageKey } from "../lib/i18n.ts";
+  import { parseSkillUrl } from "../lib/github.ts";
   import { publishedRing, REASON_MAX } from "../lib/editions.ts";
   import { canDelete, DESCRIPTION_MAX, NAME_MAX, RINGS, type Skill, type SetEdit } from "../lib/skills.ts";
-  import { addSkill, editions, editSet, remove, removeSkill, sets, settings } from "../lib/store.svelte.ts";
+  import { addSkill, editions, editSet, refreshSet, remove, removeSkill, sets, settings } from "../lib/store.svelte.ts";
   import Modal from "./Modal.svelte";
   import SkillSection from "./SkillSection.svelte";
 
@@ -97,6 +98,30 @@
     removing = null;
   }
 
+  // The refresh from GitHub: whether it is under way, and what it said.
+  let refreshing = $state(false);
+  let refreshed = $state({ text: "", failed: false });
+  const failures = { not_a_skill_url: "not_a_skill_url", not_found: "url_not_found", rate_limited: "rate_limited", network: "url_unreadable" } as const;
+  /** The refresh button needs the url the set has saved, not the one being typed. */
+  const refreshable = $derived(parseSkillUrl(set?.sourceUrl ?? "") !== null);
+
+  async function refresh() {
+    refreshing = true;
+    refreshed = { text: "", failed: false };
+    const result = await refreshSet(id);
+    refreshing = false;
+    if (!result) return;
+    if ("error" in result) {
+      refreshed = { text: t(failures[result.error]), failed: true };
+      return;
+    }
+    const parts = [
+      result.added === 1 ? t("refresh_added_one") : result.added > 1 ? t("refresh_added", { count: result.added }) : "",
+      result.gone === 1 ? t("refresh_gone_one") : result.gone > 1 ? t("refresh_gone", { count: result.gone }) : "",
+    ].filter(Boolean);
+    refreshed = { text: parts.length > 0 ? parts.join(", ") : t("refresh_up_to_date"), failed: false };
+  }
+
   /** Whether the dialog that asks to confirm a deletion is open. */
   let confirming = $state(false);
 
@@ -153,6 +178,14 @@
         />
         {#if errors.url}<span class="sl-error" role="alert">{errors.url}</span>{/if}
       </label>
+      {#if refreshable}
+        <div class="sl-refresh">
+          <button type="button" class="sl-btn" disabled={refreshing} aria-busy={refreshing} onclick={refresh}>
+            {refreshing ? t("refreshing") : t("refresh")}
+          </button>
+          <span class={refreshed.failed ? "sl-error" : "sl-refresh-done"} role="status">{refreshed.text}</span>
+        </div>
+      {/if}
       <label>
         {t("description")}
         <textarea rows="3" maxlength={DESCRIPTION_MAX} bind:value={description} oninput={() => save({ description })}></textarea>
@@ -338,6 +371,16 @@
     gap: 8px;
     padding-top: 12px;
     border-top: 1px solid var(--line);
+  }
+  .sl-refresh {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .sl-refresh-done {
+    font-size: 12px;
+    color: var(--muted);
   }
   .sl-error {
     color: var(--red);
