@@ -26,7 +26,7 @@ export interface Skill {
   goneUpstream?: boolean;
 }
 
-/** A set ("Ensemble"): what has a ring and a quadrant, a dot on the radar, and holds an ordered list of skills. */
+/** A set ("Ensemble"): what has a ring and a topic, a dot on the radar, and holds an ordered list of skills. */
 export interface SkillSet {
   /** The key of a set: random, stable, and never two with the same. */
   id: string;
@@ -34,7 +34,7 @@ export interface SkillSet {
   /** Where the set comes from, when the User knows it. */
   sourceUrl?: string;
   description: string;
-  /** The index of its quadrant, 0 to 3: renaming a quadrant does not change it. */
+  /** The index of its topic, 0 to 4: renaming a topic does not change it. */
   quadrant: number;
   ring: Ring;
   /** Markdown. */
@@ -65,7 +65,7 @@ export interface Draft {
 
 /**
  * Adds a set at the date `now`, with the id `id`, first in the list; null when its name is blank. It is to watch, in the
- * first quadrant, with no notes and no skill. A blank url is no url. The name and the description are clipped to what the
+ * first topic, with no notes and no skill. A blank url is no url. The name and the description are clipped to what the
  * View accepts, since a `SKILL.md` may give longer ones.
  */
 export function addSet(sets: readonly SkillSet[], draft: Draft, now: Date, id: string): { sets: SkillSet[]; set: SkillSet } | null {
@@ -132,7 +132,7 @@ export type SetEdit = Partial<Pick<SkillSet, "name" | "sourceUrl" | "description
 /**
  * Saves a change to the set `id` at the date `now`; null when there is no such set. The name, the description and the
  * notes are kept as typed, since the User is still typing: the name and the description are only clipped, and a blank
- * name or notes that are too long are refused with nothing saved. A blank url removes the url. A quadrant or a ring that
+ * name or notes that are too long are refused with nothing saved. A blank url removes the url. A topic or a ring that
  * does not exist is ignored, and so is an archived that is not a boolean. The reason of a move is kept as typed
  * (a blank one removes it, one that is too long is refused), but only while `publishedRing`, the ring of the set in the
  * last edition, is known and differs from its ring: back in that ring, or in no edition, it has no reason. The date
@@ -154,7 +154,7 @@ export function editSet(
   if (edit.name !== undefined) changes.name = edit.name.slice(0, NAME_MAX);
   if (edit.description !== undefined) changes.description = edit.description.slice(0, DESCRIPTION_MAX);
   if (edit.notes !== undefined) changes.notes = edit.notes;
-  if (edit.quadrant !== undefined && integerBetween(edit.quadrant, 0, 3) !== undefined) changes.quadrant = edit.quadrant;
+  if (edit.quadrant !== undefined && integerBetween(edit.quadrant, 0, 4) !== undefined) changes.quadrant = edit.quadrant;
   if (edit.ring !== undefined && RINGS.includes(edit.ring)) changes.ring = edit.ring;
   if (typeof edit.archived === "boolean") changes.archived = edit.archived;
   const ring = changes.ring ?? current.ring;
@@ -266,7 +266,7 @@ function readSet(stored: unknown, skillIds: Set<string>): SkillSet | null {
     name,
     ...(sourceUrl ? { sourceUrl } : {}),
     description: text(value.description) ?? "",
-    quadrant: integerBetween(value.quadrant, 0, 3) ?? 0,
+    quadrant: integerBetween(value.quadrant, 0, 4) ?? 0,
     ring: RINGS.find((ring) => ring === value.ring) ?? "watch",
     notes: text(value.notes) ?? "",
     skills,
@@ -316,15 +316,18 @@ export function deleteSet(sets: readonly SkillSet[], id: string, editions: reado
 export const TABS = ["library", "radar", "editions"] as const;
 export type Tab = (typeof TABS)[number];
 
-/** The names of the quadrants a new Library starts with. */
-export const DEFAULT_QUADRANTS = ["Design & planning", "Code & tests", "Writing & docs", "Tooling & workflow"] as const;
+/** The names of the five topics a new Library starts with. */
+export const DEFAULT_TOPICS = ["Design & planning", "Code & tests", "Writing & docs", "Tooling & workflow", "Learning & upskilling"] as const;
 
-/** The length a name of a quadrant must have. */
-export const QUADRANT_NAME_MAX = 40;
+/** The length a name of a topic must have. */
+export const TOPIC_NAME_MAX = 40;
+
+/** The names of the five topics, by their index. */
+export type Topics = [string, string, string, string, string];
 
 export interface Settings {
-  /** The names of the four quadrants, by their index. */
-  quadrants: [string, string, string, string];
+  /** The names of the five topics, by their index. */
+  topics: Topics;
   /** The tab the View was left on. */
   tab: Tab;
   /** What the Library is filtered by. */
@@ -334,56 +337,57 @@ export interface Settings {
 /** What the Library is filtered by: none selected in a list is no filtering on that axis. */
 export interface Filters {
   rings: Ring[];
-  quadrants: number[];
+  /** The indexes of the topics, 0 to 4. */
+  topics: number[];
   /** A part of the name. */
   query: string;
   /** Whether the archived sets are shown, greyed. */
   archived: boolean;
 }
 
-/** The filters under the key `filters` of the settings; what cannot be read is no filtering. */
+/** The filters under the key `filters` of the settings; what cannot be read is no filtering. The old `quadrants` are the topics at the same index. */
 export function readFilters(stored: unknown): Filters {
   const value = record(stored);
   const rings = Array.isArray(value.rings) ? value.rings : [];
-  const quadrants = Array.isArray(value.quadrants) ? value.quadrants : [];
+  const topics = Array.isArray(value.topics) ? value.topics : Array.isArray(value.quadrants) ? value.quadrants : [];
   return {
     rings: RINGS.filter((ring) => rings.includes(ring)),
-    quadrants: [...new Set(quadrants.filter((quadrant) => integerBetween(quadrant, 0, 3) !== undefined))],
+    topics: [...new Set(topics.filter((topic) => integerBetween(topic, 0, 4) !== undefined))],
     query: text(value.query) ?? "",
     archived: value.archived === true,
   };
 }
 
-/** The sets that have one of the rings and one of the quadrants selected, and a name, or a skill with a name, with the query in it, the archived ones only when asked; in their order. */
+/** The sets that have one of the rings and one of the topics selected, and a name, or a skill with a name, with the query in it, the archived ones only when asked; in their order. */
 export function filterSets(sets: readonly SkillSet[], filters: Filters): SkillSet[] {
   const query = plain(filters.query.trim());
   return sets.filter(
     (set) =>
       (filters.archived || !set.archived) &&
       (filters.rings.length === 0 || filters.rings.includes(set.ring)) &&
-      (filters.quadrants.length === 0 || filters.quadrants.includes(set.quadrant)) &&
+      (filters.topics.length === 0 || filters.topics.includes(set.quadrant)) &&
       (plain(set.name).includes(query) || set.skills.some((skill) => plain(skill.name).includes(query))),
   );
 }
 
-/** The names of the quadrants with the one at `index` renamed; null when the name is blank or too long, or there is no such quadrant. */
-export function renameQuadrant(quadrants: Settings["quadrants"], index: number, name: string): Settings["quadrants"] | null {
+/** The names of the topics with the one at `index` renamed; null when the name is blank or too long, or there is no such topic. */
+export function renameTopic(topics: Topics, index: number, name: string): Topics | null {
   const trimmed = name.trim();
-  if (!trimmed || trimmed.length > QUADRANT_NAME_MAX || integerBetween(index, 0, 3) === undefined) return null;
-  const renamed = [...quadrants] as Settings["quadrants"];
+  if (!trimmed || trimmed.length > TOPIC_NAME_MAX || integerBetween(index, 0, 4) === undefined) return null;
+  const renamed = [...topics] as Topics;
   renamed[index] = trimmed;
   return renamed;
 }
 
-/** The settings under the key `settings`; what cannot be read takes its default. */
+/** The settings under the key `settings`; what cannot be read takes its default. The four old `quadrants` keep their index as topics. */
 export function readSettings(stored: unknown): Settings {
   const value = record(stored);
-  const names = Array.isArray(value.quadrants) ? value.quadrants : [];
-  const quadrants = DEFAULT_QUADRANTS.map((fallback, index) => {
+  const names = Array.isArray(value.topics) ? value.topics : Array.isArray(value.quadrants) ? value.quadrants : [];
+  const topics = DEFAULT_TOPICS.map((fallback, index) => {
     const name = text(names[index])?.trim();
-    return name && name.length <= QUADRANT_NAME_MAX ? name : fallback;
-  }) as Settings["quadrants"];
-  return { quadrants, tab: TABS.find((tab) => tab === value.tab) ?? "library", filters: readFilters(value.filters) };
+    return name && name.length <= TOPIC_NAME_MAX ? name : fallback;
+  }) as Topics;
+  return { topics, tab: TABS.find((tab) => tab === value.tab) ?? "library", filters: readFilters(value.filters) };
 }
 
 /** The url of a set or a skill when it is an http or https one, which the View opens in a new tab; null otherwise. */

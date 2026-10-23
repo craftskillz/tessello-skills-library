@@ -29,7 +29,7 @@ const edition = (number: number): Edition => ({
   number,
   publishedAt: `2026-10-0${number}T00:00:00.000Z`,
   intro: `Edition ${number}`,
-  quadrants: ["A", "B", "C", "D"],
+  topics: ["A", "B", "C", "D", "E"],
   entries: [],
   retired: [],
 });

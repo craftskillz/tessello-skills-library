@@ -193,10 +193,10 @@
         <textarea rows="3" maxlength={DESCRIPTION_MAX} bind:value={description} oninput={() => save({ description })}></textarea>
       </label>
       <label>
-        {t("quadrant")}
+        {t("topic")}
         <select value={String(set.quadrant)} onchange={(event) => save({ quadrant: Number(event.currentTarget.value) })}>
-          {#each settings.quadrants as quadrant, index (index)}
-            <option value={String(index)}>{quadrant}</option>
+          {#each settings.topics as topic, index (index)}
+            <option value={String(index)}>{topic}</option>
           {/each}
         </select>
       </label>

@@ -147,8 +147,8 @@
       <dl class="sl-radar-panel-facts">
         <dt>{t("ring")}</dt>
         <dd>{ringName(set.ring)}</dd>
-        <dt>{t("quadrant")}</dt>
-        <dd>{settings.quadrants[set.quadrant]}</dd>
+        <dt>{t("topic")}</dt>
+        <dd>{settings.topics[set.quadrant]}</dd>
       </dl>
       <ul class="sl-radar-panel-skills">
         {#each set.skills as skill (skill.id)}

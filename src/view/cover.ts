@@ -15,7 +15,7 @@ const BACKGROUND = "#ffffff";
 
 /** The PNG cover of the edition: its radar, centred and as large as the margin allows. */
 export async function renderCover(edition: Edition): Promise<Blob> {
-  const svg = renderRadar(edition.entries, edition.quadrants, { labels: POST_RADAR_LABELS, background: BACKGROUND });
+  const svg = renderRadar(edition.entries, edition.topics, { labels: POST_RADAR_LABELS, background: BACKGROUND });
   const image = new Image();
   image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   await image.decode();

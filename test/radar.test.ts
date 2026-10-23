@@ -5,7 +5,8 @@ import { RINGS, type Ring } from "../src/lib/skills.ts";
 
 const entry = (id: string, rest: Partial<RadarEntry> = {}): RadarEntry => ({ id, name: `Skill ${id}`, quadrant: 0, ring: "watch", change: "unchanged", ...rest });
 
-const QUADRANTS = ["Design & planning", "Code & tests", "Writing & docs", "Tooling & workflow"] as const;
+const TOPICS = ["Design & planning", "Code & tests", "Writing & docs", "Tooling & workflow", "Data & agents"] as const;
+const FOUR = TOPICS.slice(0, 4);
 const OPTIONS: RadarOptions = {
   labels: {
     title: "Skills radar",
@@ -18,7 +19,7 @@ const OPTIONS: RadarOptions = {
   },
 };
 
-const render = (entries: RadarEntry[], options: RadarOptions = OPTIONS) => renderRadar(entries, QUADRANTS, options);
+const render = (entries: RadarEntry[], options: RadarOptions = OPTIONS, topics: readonly string[] = TOPICS) => renderRadar(entries, topics, options);
 
 /** The centre of each dot, read back from the drawing. */
 function positions(svg: string): Map<string, { x: number; y: number }> {
@@ -32,8 +33,10 @@ function positions(svg: string): Map<string, { x: number; y: number }> {
 /** The drawing of one dot: from its opening tag to its closing one. */
 const dotOf = (svg: string, id: string) => svg.match(new RegExp(`<g data-set-id="${id}".*?</g>`))![0];
 
-const CENTRE = { x: 260, y: 270 };
+const CENTRE = { x: 380, y: 270 };
 const RADIUS = 230;
+/** Where the first sector starts, in degrees clockwise from the right (y down), by number of sectors: centred on the right horizontal, where the ring names are, so that no axis is on them. */
+const START: Record<number, number> = { 4: -45, 5: -36 };
 const DOT = 8;
 /** Where each ring ends, as a share of the radius. */
 const RING_ENDS: Record<Ring, [number, number]> = { recommended: [0, 0.38], try: [0.38, 0.58], watch: [0.58, 0.8], deprecated: [0.8, 1] };
@@ -109,37 +112,60 @@ describe("positions of the dots", () => {
     assert.notDeepEqual(found.get("skill-1"), found.get("skill-2"));
   });
 
-  test("no two dots overlap, with ten skills in one recommended cell and twenty-five in one watch cell", () => {
+  test("no two dots overlap, with eight skills in one recommended cell and eighteen in one watch cell", () => {
     const entries = [
-      ...Array.from({ length: 10 }, (_, i) => entry(`rec-${i}`, { quadrant: 1, ring: "recommended" })),
-      ...Array.from({ length: 25 }, (_, i) => entry(`watch-${i}`, { quadrant: 3, ring: "watch" })),
+      ...Array.from({ length: 8 }, (_, i) => entry(`rec-${i}`, { quadrant: 1, ring: "recommended" })),
+      ...Array.from({ length: 18 }, (_, i) => entry(`watch-${i}`, { quadrant: 3, ring: "watch" })),
     ];
     const svg = render(entries);
-    assert.equal(positions(svg).size, 35);
+    assert.equal(positions(svg).size, 26);
     assertNoOverlap(svg);
   });
 
-  test("every dot is inside its quadrant and its ring, clear of the axes and of the ring boundaries", () => {
-    const entries: RadarEntry[] = [];
-    for (let quadrant = 0; quadrant < 4; quadrant++) {
-      for (const ring of RINGS) {
-        for (let i = 0; i < 6; i++) entries.push(entry(`${quadrant}-${ring}-${i}`, { quadrant, ring }));
+  for (const count of [4, 5]) {
+    test(`with ${count} topics, every dot is inside its sector and its ring, clear of the axes and of the ring boundaries`, () => {
+      const topics = TOPICS.slice(0, count);
+      const entries: RadarEntry[] = [];
+      for (let quadrant = 0; quadrant < count; quadrant++) {
+        for (const ring of RINGS) {
+          for (let i = 0; i < 6; i++) entries.push(entry(`${quadrant}-${ring}-${i}`, { quadrant, ring }));
+        }
       }
-    }
-    const svg = render(entries);
-    const found = positions(svg);
-    assert.equal(found.size, entries.length);
-    for (const item of entries) {
-      const at = found.get(item.id)!;
-      const dx = at.x - CENTRE.x;
-      const dy = at.y - CENTRE.y;
-      assert.equal(dx < 0 ? (dy < 0 ? 0 : 2) : dy < 0 ? 1 : 3, item.quadrant, `${item.id} quadrant`);
-      assert.ok(Math.abs(dx) >= DOT && Math.abs(dy) >= DOT, `${item.id} touches an axis`);
-      const [from, to] = RING_ENDS[item.ring];
-      const radius = Math.hypot(dx, dy);
-      assert.ok(radius <= to * RADIUS - DOT, `${item.id} reaches out of its ring`);
-      if (from > 0) assert.ok(radius >= from * RADIUS + DOT, `${item.id} reaches into the ring inside`);
-    }
+      const svg = render(entries, OPTIONS, topics);
+      const found = positions(svg);
+      assert.equal(found.size, entries.length);
+      const width = 360 / count;
+      for (const item of entries) {
+        const at = found.get(item.id)!;
+        const dx = at.x - CENTRE.x;
+        const dy = at.y - CENTRE.y;
+        const radius = Math.hypot(dx, dy);
+        const from = START[count] + item.quadrant * width;
+        const angle = (((Math.atan2(dy, dx) * 180) / Math.PI - from) % 360 + 360) % 360;
+        assert.ok(angle < width, `${item.id} is in another sector`);
+        // The distance to each of the two boundaries of the sector.
+        const edge = (degrees: number) => radius * Math.sin((degrees * Math.PI) / 180);
+        assert.ok(edge(angle) >= DOT, `${item.id} touches the boundary before it`);
+        assert.ok(edge(width - angle) >= DOT, `${item.id} touches the boundary after it`);
+        const [ringFrom, ringTo] = RING_ENDS[item.ring];
+        assert.ok(radius <= ringTo * RADIUS - DOT, `${item.id} reaches out of its ring`);
+        if (ringFrom > 0) assert.ok(radius >= ringFrom * RADIUS + DOT, `${item.id} reaches into the ring inside`);
+      }
+    });
+
+    test(`with ${count} topics, a dot keeps its place for the same id`, () => {
+      const topics = TOPICS.slice(0, count);
+      const one = entry("skill-1", { quadrant: count - 1, ring: "try" });
+      const alone = positions(render([one], OPTIONS, topics));
+      const crowded = positions(render([one, entry("o-1", { quadrant: 0, ring: "try" }), entry("o-2", { quadrant: 1, ring: "watch" })], OPTIONS, topics));
+      assert.deepEqual(alone.get("skill-1"), crowded.get("skill-1"));
+    });
+  }
+
+  test("a topic index beyond the last sector is drawn in the last one", () => {
+    const at = positions(render([entry("a", { quadrant: 9 })])).get("a")!;
+    const angle = ((((Math.atan2(at.y - CENTRE.y, at.x - CENTRE.x) * 180) / Math.PI + 36) % 360) + 360) % 360;
+    assert.ok(angle >= 288 && angle < 360);
   });
 });
 
@@ -202,16 +228,16 @@ describe("the drawing", () => {
     assert.equal(svg.includes("<b>"), false);
   });
 
-  test("the four quadrant names, the four ring names and the four legend labels are written", () => {
+  test("the topic names, the four ring names and the four legend labels are written", () => {
     const svg = render([]);
-    for (const name of QUADRANTS) assert.ok(svg.includes(`>${name.replace("&", "&amp;")}</text>`), name);
+    for (const name of TOPICS) assert.ok(svg.includes(`>${name.replace("&", "&amp;")}</text>`), name);
     for (const label of Object.values(OPTIONS.labels.rings)) assert.ok(svg.includes(`>${label}</text>`), label);
     for (const label of [OPTIONS.labels.unchanged, OPTIONS.labels.new, OPTIONS.labels.up, OPTIONS.labels.down]) {
       assert.ok(svg.includes(`>${label}</text>`), label);
     }
   });
 
-  test("a quadrant name too wide for its half is squeezed to fit", () => {
+  test("a topic name too wide for its room is squeezed to fit", () => {
     const svg = renderRadar([], ["x".repeat(40), "short", "short", "short"], OPTIONS);
     assert.match(svg, /<text [^>]*textLength="[\d.]+" lengthAdjust="spacingAndGlyphs"[^>]*>x{40}<\/text>/);
     assert.doesNotMatch(svg, /lengthAdjust="spacingAndGlyphs"[^>]*>short</);
@@ -222,6 +248,103 @@ describe("the drawing", () => {
     const svg = render([], { ...OPTIONS, background: "#101418" });
     assert.match(svg, /<rect [^>]*width="100%" height="100%" fill="#101418"/);
   });
+});
+
+/** A topic name as drawn: its box as estimated from its anchor, its room and its size (characters × 0.6 × size, squeezed to textLength). */
+function nameBox(svg: string, name: string) {
+  const text = svg.match(new RegExp(`<text ([^>]*)>${name}</text>`))![1];
+  const attr = (key: string) => text.match(new RegExp(`(?:^| )${key}="([^"]*)"`))?.[1];
+  const size = Number(attr("font-size"));
+  const width = attr("textLength") ? Number(attr("textLength")) : name.length * 0.6 * size;
+  const x = Number(attr("x"));
+  const anchor = attr("text-anchor");
+  const left = anchor === "start" ? x : anchor === "end" ? x - width : x - width / 2;
+  const y = Number(attr("y"));
+  return { left, right: left + width, top: y - size, bottom: y + size * 0.2, fill: attr("fill"), bold: attr("font-weight") === "bold" };
+}
+
+describe("the topics around the circle", () => {
+  for (const count of [4, 5]) {
+    const names = ["x".repeat(40), ...TOPICS.slice(1, count).map((name) => name.replace("&", "and"))];
+    const svg = renderRadar([], names, OPTIONS);
+    const [, width, height] = svg.match(/viewBox="0 0 (\d+) (\d+)"/)!.map(Number);
+    const boxes = names.map((name) => nameBox(svg, name));
+
+    test(`with ${count} topics, each name is outside the circle, inside the drawing, in bold`, () => {
+      boxes.forEach((box, i) => {
+        assert.ok(box.left >= 0 && box.right <= width && box.top >= 0 && box.bottom <= height, `name ${i} leaves the drawing`);
+        const nearest = Math.hypot(Math.min(Math.max(CENTRE.x, box.left), box.right) - CENTRE.x, Math.min(Math.max(CENTRE.y, box.top), box.bottom) - CENTRE.y);
+        assert.ok(nearest >= RADIUS, `name ${i} is on the circle`);
+        assert.ok(box.bold);
+      });
+    });
+
+    test(`with ${count} topics, no two names overlap and none touches the legend`, () => {
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i];
+          const b = boxes[j];
+          assert.ok(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top, `names ${i} and ${j} overlap`);
+        }
+        assert.ok(boxes[i].bottom < CENTRE.y + RADIUS + 50, `name ${i} reaches the legend`);
+      }
+    });
+
+    test(`with ${count} topics, each name is in the colour of its sector`, () => {
+      assert.equal(new Set(boxes.map((box) => box.fill)).size, count);
+    });
+  }
+
+  test("the fifth topic has a colour of its own, which its dots take", () => {
+    const svg = render([entry("a", { quadrant: 4 }), entry("b", { quadrant: 0 }), entry("c", { quadrant: 3 })]);
+    const fill = (id: string) => dotOf(svg, id).match(/fill="(#\w+)"/)![1];
+    assert.notEqual(fill("a"), fill("b"));
+    assert.notEqual(fill("a"), fill("c"));
+    assert.equal(nameBox(svg, "Data and agents".replace("and", "&amp;")).fill, fill("a"));
+  });
+
+  for (const count of [4, 5]) {
+    test(`with ${count} topics, one axis per boundary, from the centre to the edge, and none crosses the ring names`, () => {
+      const svg = render([], OPTIONS, TOPICS.slice(0, count));
+      const axes = [...svg.matchAll(/M([\d.]+) ([\d.]+)L([\d.]+) ([\d.]+)/g)].map((m) => m.slice(1).map(Number));
+      assert.equal(axes.length, count);
+      axes.forEach(([x1, y1, x2, y2], k) => {
+        assert.deepEqual([x1, y1], [CENTRE.x, CENTRE.y]);
+        assert.ok(Math.abs(Math.hypot(x2 - x1, y2 - y1) - RADIUS) < 0.5);
+        const degrees = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
+        const expected = START[count] + (k * 360) / count;
+        assert.ok(Math.abs((((degrees - expected) % 360) + 540) % 360 - 180) < 0.5, `axis ${k}`);
+      });
+      for (const label of Object.values(OPTIONS.labels.rings)) {
+        const match = svg.match(new RegExp(`<text x="([\\d.]+)" y="([\\d.]+)"[^>]*>${label}</text>`))!;
+        const [x, y] = [Number(match[1]), Number(match[2])];
+        const half = (label.length * 0.6 * 9) / 2;
+        for (const [x1, y1, x2, y2] of axes) {
+          for (let t = 0; t <= 1; t += 0.005) {
+            const px = x1 + t * (x2 - x1);
+            const py = y1 + t * (y2 - y1);
+            assert.ok(!(px >= x - half && px <= x + half && py >= y - 9 && py <= y + 2), `an axis crosses ${label}`);
+          }
+        }
+      }
+    });
+
+    test(`with ${count} topics, no dot covers the ring names, even in a crowded first sector`, () => {
+      const entries = RINGS.flatMap((ring) => Array.from({ length: 8 }, (_, i) => entry(`${ring}-${i}`, { ring, quadrant: 0 })));
+      const svg = render(entries, OPTIONS, TOPICS.slice(0, count));
+      const dots = [...positions(svg).values()];
+      for (const label of Object.values(OPTIONS.labels.rings)) {
+        const match = svg.match(new RegExp(`<text x="([\\d.]+)" y="([\\d.]+)"[^>]*>${label}</text>`))!;
+        const [x, y] = [Number(match[1]), Number(match[2])];
+        const half = (label.length * 0.6 * 9) / 2;
+        for (const dot of dots) {
+          const nearestX = Math.min(Math.max(dot.x, x - half), x + half);
+          const nearestY = Math.min(Math.max(dot.y, y - 9), y);
+          assert.ok(distance(dot, { x: nearestX, y: nearestY }) >= DOT, `a dot covers ${label}`);
+        }
+      }
+    });
+  }
 });
 
 describe("the tooltip of a dot", () => {

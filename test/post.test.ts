@@ -22,7 +22,7 @@ const edition = (rest: Partial<Edition> = {}, ...entries: EditionEntry[]): Editi
   number: 2,
   publishedAt: "2026-10-10T00:00:00.000Z",
   intro: "Hello",
-  quadrants: ["Design", "Code", "Writing", "Tooling"],
+  topics: ["Design", "Code", "Writing", "Tooling", "Learning"],
   entries,
   retired: [],
   ...rest,

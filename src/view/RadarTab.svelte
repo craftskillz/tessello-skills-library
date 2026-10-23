@@ -26,7 +26,7 @@
   const numbered = $derived(numberEntries(entries));
 
   const svg = $derived(
-    renderRadar(entries, settings.quadrants, {
+    renderRadar(entries, settings.topics, {
       labels: {
         title: t("radar_title"),
         rings: Object.fromEntries(RINGS.map((ring) => [ring, ringName(ring)])) as Record<Ring, string>,
@@ -89,10 +89,10 @@
     <div class="sl-radar-main">
       <RadarDrawing {svg} {onOpen} />
       <nav class="sl-legend" aria-label={t("radar_legend")}>
-        {#each settings.quadrants as quadrant, index (index)}
+        {#each settings.topics as topic, index (index)}
           {@const group = numbered.filter((entry) => entry.quadrant === index)}
           {#if group.length}
-            <h3 class="sl-legend-heading">{quadrant}</h3>
+            <h3 class="sl-legend-heading">{topic}</h3>
             <ul class="sl-legend-list">
               {#each group as entry (entry.id)}
                 <li>

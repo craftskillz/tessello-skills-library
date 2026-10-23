@@ -17,14 +17,14 @@ After any of the last three, **Add manually** opens the form with the URL filled
 
 ## Adding a skill by hand
 
-Click **Add manually**, type the name of the skill, and optionally its URL and a description, then click **Add**. The skill appears at the top of the **Library**, to watch, with three stars, in the first quadrant. Its name is a link to its URL, when it has one. A URL that is already in your Library adds nothing.
+Click **Add manually**, type the name of the skill, and optionally its URL and a description, then click **Add**. The skill appears at the top of the **Library**, to watch, with three stars, in the first topic. Its name is a link to its URL, when it has one. A URL that is already in your Library adds nothing.
 
 ## Judging a skill
 
 Click a skill in the **Library** (or its pencil button, which works with the keyboard) to open its panel. On a narrow screen it fills the page. It holds:
 
 - **Name**, **URL** and **Description**.
-- **Quadrant**, chosen among the four.
+- **Topic**, chosen among the five: Design & planning, Code & tests, Writing & docs, Tooling & workflow and Learning & upskilling (you can rename them).
 - **Ring**: Recommended, Try, Watch or Deprecated.
 - **Score**: one to five stars. Click a star, or use the arrow keys once a star is focused.
 - **Notes**: free text in Markdown, up to 8,000 characters. A new skill starts with a template.
@@ -41,19 +41,19 @@ At the bottom of a skill's panel, **Archive** takes the skill off the **Library*
 
 **Delete** removes a skill for good, after you confirm. It only appears for a skill that is in no edition: a skill you published offers **Archive** only.
 
-## Renaming the quadrants
+## Renaming the topics
 
-In the **Library**, click **Rename quadrants** and edit the four names (1 to 40 characters, required). A name is saved as soon as it is valid; a blank one shows **A quadrant name is required.** and is not saved. Renaming a quadrant moves no skill: each stays in its quadrant, under the new name.
+In the **Library**, click **Rename topics** and edit the five names (1 to 40 characters, required). A name is saved as soon as it is valid; a blank one shows **A topic name is required.** and is not saved. Renaming a topic moves no skill: each stays in its topic, under the new name.
 
 ## Filtering and searching
 
-Above the list, **Search by name** ignores case and accents. The buttons for each ring and each quadrant filter the list; select several to see skills that match any of them. **Clear filters** appears when a filter is on, and **No skill matches these filters.** when nothing is left. The page remembers your filters.
+Above the list, **Search by name** ignores case and accents. The buttons for each ring and each topic filter the list; select several to see skills that match any of them. **Clear filters** appears when a filter is on, and **No skill matches these filters.** when nothing is left. The page remembers your filters.
 
 ## The radar
 
-The **Radar** tab draws the radar of your next edition: every skill that is not archived, as a numbered dot. Its quadrant gives the dot its colour and its corner, and its ring, from the centre outwards (Recommended, Try, Watch, Deprecated), gives its distance from the centre. A dot stays where it is until you change the ring or the quadrant of its skill.
+The **Radar** tab draws the radar of your next edition: every skill that is not archived, as a numbered dot. Its topic gives the dot its colour and its sector, and its ring, from the centre outwards (Recommended, Try, Watch, Deprecated), gives its distance from the centre. A dot stays where it is until you change the ring or the topic of its skill.
 
-The marker tells what changed since the last edition: a circle for a skill unchanged or only updated, a diamond for a new skill or one that is back, a triangle up for a skill moved towards the centre and a triangle down for one moved away from it. The legend under the radar (beside it on a wide screen) lists the skills with the same numbers, by quadrant, then by ring, then by name.
+The marker tells what changed since the last edition: a circle for a skill unchanged or only updated, a diamond for a new skill or one that is back, a triangle up for a skill moved towards the centre and a triangle down for one moved away from it. The legend under the radar (beside it on a wide screen) lists the skills with the same numbers, by topic, then by ring, then by name.
 
 Click a dot, or a line of the legend, to open the skill in the **Library**.
 
@@ -73,7 +73,7 @@ The Home shows how many skills each ring holds (archived skills are left out), t
 
 ## The tabs
 
-- **Library** lists your skills, the newest first, with their ring, their stars and their quadrant.
+- **Library** lists your skills, the newest first, with their ring, their stars and their topic.
 - **Radar** draws your skills as a radar, with the changes waiting to be published.
 - **Editions** lists the editions you published, the newest first: its number, its date and how many skills it holds in each ring. An edition is never changed.
 

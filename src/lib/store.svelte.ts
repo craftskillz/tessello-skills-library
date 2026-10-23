@@ -9,7 +9,7 @@ import { t } from "./i18n.ts";
 import {
   addSkillToSet,
   addUnlessDuplicate,
-  DEFAULT_QUADRANTS,
+  DEFAULT_TOPICS,
   deleteSet,
   type Draft,
   editSkillInSet,
@@ -18,7 +18,7 @@ import {
   importSet as importSetOf,
   refreshSet as refreshSetOf,
   removeSkillFromSet,
-  renameQuadrant as renamed,
+  renameTopic as renamed,
   type Settings,
   type Skill,
   type SkillEdit,
@@ -30,7 +30,7 @@ import { reasonOf, type SkillStorage, skillStorage } from "./storage.ts";
 
 export const sets = $state<{ list: SkillSet[] }>({ list: [] });
 
-export const settings = $state<Settings>({ quadrants: [...DEFAULT_QUADRANTS], tab: "library", filters: { rings: [], quadrants: [], query: "", archived: false } });
+export const settings = $state<Settings>({ topics: [...DEFAULT_TOPICS], tab: "library", filters: { rings: [], topics: [], query: "", archived: false } });
 
 /**
  * The published editions, newest first, which decide what changed since the last one, and what can be deleted: a set
@@ -205,12 +205,12 @@ export function remove(id: string): boolean {
   return true;
 }
 
-/** Renames a quadrant and saves it; false, with nothing changed, when the name is blank or too long. */
-export function renameQuadrant(index: number, name: string): boolean {
+/** Renames a topic and saves it; false, with nothing changed, when the name is blank or too long. */
+export function renameTopic(index: number, name: string): boolean {
   if (!status.loaded) return false;
-  const quadrants = renamed(settings.quadrants, index, name);
-  if (!quadrants) return false;
-  settings.quadrants = quadrants;
+  const topics = renamed(settings.topics, index, name);
+  if (!topics) return false;
+  settings.topics = topics;
   void saveSettings();
   return true;
 }
@@ -229,7 +229,7 @@ export function setFilters(filters: Filters): void {
  */
 export async function publish(intro: string): Promise<{ published: Edition } | { error: "intro_required" } | { missing: SkillSet[] } | { failed: string } | null> {
   if (!status.loaded) return null;
-  const result = publishEdition(sets.list, settings.quadrants, editions.published, intro, new Date());
+  const result = publishEdition(sets.list, settings.topics, editions.published, intro, new Date());
   if ("error" in result) return result.error === "reasons_missing" ? { missing: result.missing } : { error: result.error };
   const index = [result.summary, ...editions.published.map(summaryOf)];
   try {

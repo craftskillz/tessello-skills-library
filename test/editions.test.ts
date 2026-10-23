@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 import { changesSince } from "../src/lib/changes.ts";
 import { missingReasons, publishedRing, publishEdition, readEdition, readEditionIndex, summaryOf, type Edition } from "../src/lib/editions.ts";
 import { legacySkillId, migrateLegacySkills } from "../src/lib/migration.ts";
-import { DEFAULT_QUADRANTS, type Skill, type SkillSet } from "../src/lib/skills.ts";
+import { DEFAULT_TOPICS, type Skill, type Topics, type SkillSet } from "../src/lib/skills.ts";
 
 const member = (id: string, rest: Partial<Skill> = {}): Skill => ({
   id,
@@ -32,13 +32,13 @@ const edition = (number: number, ...entries: Partial<Edition["entries"][number]>
   number,
   publishedAt: "2026-10-10T00:00:00.000Z",
   intro: "Hello",
-  quadrants: ["A", "B", "C", "D"],
+  topics: ["A", "B", "C", "D", "E"],
   entries: entries.map((entry) => ({ id: "a", name: "Set a", quadrant: 0, ring: "watch", change: "new", description: "", notes: "", skills: [], ...entry })),
   retired: [],
 });
 
 const now = new Date("2026-10-25T08:00:00Z");
-const quadrants: Edition["quadrants"] = ["Q1", "Q2", "Q3", "Q4"];
+const topics: Topics = ["Q1", "Q2", "Q3", "Q4", "Q5"];
 
 describe("the published ring", () => {
   test("is the ring in the edition with the highest number, whatever the order", () => {
@@ -71,17 +71,26 @@ describe("the moves that miss an explanation", () => {
 });
 
 describe("publishing an edition", () => {
-  test("the first edition is number 1, dated, with the trimmed intro and the quadrants of the moment", () => {
-    const result = publishEdition([skill("a")], quadrants, [], "  Hello **world**\n", now);
+  test("the first edition is number 1, dated, with the trimmed intro and the topics of the moment", () => {
+    const result = publishEdition([skill("a")], topics, [], "  Hello **world**\n", now);
     assert.ok("edition" in result);
     assert.equal(result.edition.number, 1);
     assert.equal(result.edition.publishedAt, "2026-10-25T08:00:00.000Z");
     assert.equal(result.edition.intro, "Hello **world**");
-    assert.deepEqual(result.edition.quadrants, quadrants);
+    assert.deepEqual(result.edition.topics, topics);
+  });
+
+  test("a new edition freezes five topics, a copy of the ones given", () => {
+    const given: Topics = [...topics];
+    const result = publishEdition([skill("a")], given, [], "Intro", now);
+    given[0] = "Renamed later";
+    assert.ok("edition" in result);
+    assert.deepEqual(result.edition.topics, topics);
+    assert.equal(result.edition.topics.length, 5);
   });
 
   test("a blank intro is refused", () => {
-    assert.deepEqual(publishEdition([skill("a")], quadrants, [], "  \n", now), { error: "intro_required" });
+    assert.deepEqual(publishEdition([skill("a")], topics, [], "  \n", now), { error: "intro_required" });
   });
 
   test("an entry freezes a set that is not archived with its skills, and its change", () => {
@@ -97,7 +106,7 @@ describe("publishing an edition", () => {
           skills: [member("s1", { name: "Red", sourceUrl: "https://x.test/s1", description: "sd", score: 4, notes: "sn" }), member("s2")],
         }),
       ],
-      quadrants,
+      topics,
       [],
       "Intro",
       now,
@@ -122,7 +131,7 @@ describe("publishing an edition", () => {
   });
 
   test("the number follows the highest one", () => {
-    const result = publishEdition([skill("a")], quadrants, [edition(3, { id: "a" }), edition(2, { id: "a" })], "Intro", now);
+    const result = publishEdition([skill("a")], topics, [edition(3, { id: "a" }), edition(2, { id: "a" })], "Intro", now);
     assert.ok("edition" in result);
     assert.equal(result.edition.number, 4);
     assert.equal(result.edition.entries[0].change, "unchanged");
@@ -130,7 +139,7 @@ describe("publishing an edition", () => {
   });
 
   test("a moved skill keeps its previous ring and its trimmed reason", () => {
-    const result = publishEdition([skill("a", { ring: "recommended", moveReason: " Proven " })], quadrants, [edition(1, { id: "a" })], "Intro", now);
+    const result = publishEdition([skill("a", { ring: "recommended", moveReason: " Proven " })], topics, [edition(1, { id: "a" })], "Intro", now);
     assert.ok("edition" in result);
     assert.deepEqual(result.edition.entries[0], {
       id: "a", name: "Set a", description: "", quadrant: 0, ring: "recommended", notes: "", skills: [], change: "moved", previousRing: "watch", moveReason: "Proven",
@@ -144,7 +153,7 @@ describe("publishing an edition", () => {
       skill("n", { notes: "same" }),
     ];
     const published = edition(1, { id: "m", skills: [{ id: "s1", name: "Skill s1", description: "", notes: "" }] }, { id: "u" }, { id: "n", notes: "same" });
-    const result = publishEdition(sets, quadrants, [published], "Intro", now);
+    const result = publishEdition(sets, topics, [published], "Intro", now);
     assert.ok("edition" in result);
     const [moved, updated, unchanged] = result.edition.entries;
     assert.deepEqual(moved.skillChanges, { added: [], removed: [], scores: [{ id: "s1", name: "Skill s1", after: 5 }] });
@@ -154,21 +163,21 @@ describe("publishing an edition", () => {
   });
 
   test("a moved set whose skills did not change has no skill changes", () => {
-    const result = publishEdition([skill("a", { ring: "try", moveReason: "Why" })], quadrants, [edition(1, { id: "a" })], "Intro", now);
+    const result = publishEdition([skill("a", { ring: "try", moveReason: "Why" })], topics, [edition(1, { id: "a" })], "Intro", now);
     assert.ok("edition" in result);
     assert.equal("skillChanges" in result.edition.entries[0], false);
   });
 
   test("a moved skill with no reason stops the publication, naming the skills", () => {
     const skills = [skill("a", { ring: "try" }), skill("b")];
-    const result = publishEdition(skills, quadrants, [edition(1, { id: "a" }, { id: "b" })], "Intro", now);
+    const result = publishEdition(skills, topics, [edition(1, { id: "a" }, { id: "b" })], "Intro", now);
     assert.ok("error" in result && result.error === "reasons_missing");
     assert.deepEqual(result.missing, [skills[0]]);
   });
 
   test("a skill archived since the last edition is retired, and one archived before is in neither list", () => {
     const skills = [skill("a", { archived: true, ring: "try" }), skill("b", { archived: true }), skill("c")];
-    const result = publishEdition(skills, quadrants, [edition(1, { id: "a", ring: "recommended" })], "Intro", now);
+    const result = publishEdition(skills, topics, [edition(1, { id: "a", ring: "recommended" })], "Intro", now);
     assert.ok("edition" in result);
     assert.deepEqual(result.edition.retired, [{ id: "a", name: "Set a", previousRing: "recommended" }]);
     assert.deepEqual(result.edition.entries.map((entry) => entry.id), ["c"]);
@@ -176,7 +185,7 @@ describe("publishing an edition", () => {
 
   test("the reasons are cleared from all the skills, the others being the same objects, and the summary counts the sets per ring", () => {
     const skills = [skill("a", { ring: "try", moveReason: "Why" }), skill("b"), skill("c", { ring: "try" })];
-    const result = publishEdition(skills, quadrants, [edition(1, { id: "a" }, { id: "b" }, { id: "c", ring: "try" })], "Intro", now);
+    const result = publishEdition(skills, topics, [edition(1, { id: "a" }, { id: "b" }, { id: "c", ring: "try" })], "Intro", now);
     assert.ok("edition" in result);
     assert.equal("moveReason" in result.sets[0], false);
     assert.equal(result.sets[0].ring, "try");
@@ -215,7 +224,7 @@ describe("reading a stored edition", () => {
     });
     assert.ok(read);
     assert.equal(read.intro, "");
-    assert.deepEqual(read.quadrants, DEFAULT_QUADRANTS);
+    assert.deepEqual(read.topics, DEFAULT_TOPICS.slice(0, 4));
     assert.deepEqual(read.entries, [{ id: "b", name: "B", description: "", quadrant: 0, ring: "watch", notes: "", change: "unchanged", skills: [] }]);
     assert.deepEqual(read.retired, [{ id: "r", name: "R", previousRing: "try" }]);
   });
@@ -272,9 +281,19 @@ describe("reading a stored edition", () => {
     assert.deepEqual([...changes.values()], [{ kind: "unchanged" }, { kind: "unchanged" }]);
   });
 
-  test("the names of the quadrants are read, each falling back to its default", () => {
+  test("the names of the topics are read, each falling back to its default", () => {
+    const read = readEdition({ number: 1, publishedAt: "2026-10-10T00:00:00Z", topics: ["One", 2, "  ", "Four"] });
+    assert.deepEqual(read?.topics, ["One", DEFAULT_TOPICS[1], DEFAULT_TOPICS[2], "Four", DEFAULT_TOPICS[4]]);
+  });
+
+  test("an edition published with four quadrants is read with its four topics", () => {
     const read = readEdition({ number: 1, publishedAt: "2026-10-10T00:00:00Z", quadrants: ["One", 2, "  ", "Four"] });
-    assert.deepEqual(read?.quadrants, ["One", DEFAULT_QUADRANTS[1], DEFAULT_QUADRANTS[2], "Four"]);
+    assert.deepEqual(read?.topics, ["One", DEFAULT_TOPICS[1], DEFAULT_TOPICS[2], "Four"]);
+  });
+
+  test("an entry in the fifth topic is read as such", () => {
+    const read = readEdition({ number: 1, publishedAt: "2026-10-10T00:00:00Z", entries: [{ id: "a", name: "A", skills: [], quadrant: 4 }] });
+    assert.equal(read?.entries[0].quadrant, 4);
   });
 });
 

@@ -18,10 +18,11 @@ import {
   NOTES_TEMPLATE,
   readFilters,
   readSettings,
+  type Topics,
   readSets,
   refreshSet,
   removeSkillFromSet,
-  renameQuadrant,
+  renameTopic,
   type Skill,
   type SkillSet,
 } from "../src/lib/skills.ts";
@@ -129,9 +130,13 @@ describe("reading the sets the storage holds", () => {
   });
 
   test("a value out of range or of the wrong kind takes its default", () => {
-    const [read] = readSets([{ id: "a", name: "A", ring: "adopt", quadrant: 4, addedAt: "never", updatedAt: 3, archived: "yes", notes: 1, description: null }]);
+    const [read] = readSets([{ id: "a", name: "A", ring: "adopt", quadrant: 5, addedAt: "never", updatedAt: 3, archived: "yes", notes: 1, description: null }]);
     assert.deepEqual(read, set("a", new Date(0).toISOString(), { name: "A" }));
     assert.equal(readSets([{ id: "a", name: "A", score: 2.5, quadrant: -1 }])[0].quadrant, 0);
+  });
+
+  test("a set in the fifth topic is read as such", () => {
+    assert.equal(readSets([{ id: "a", name: "A", quadrant: 4 }])[0].quadrant, 4);
   });
 });
 
@@ -152,24 +157,43 @@ describe("the link of a set or a skill", () => {
 });
 
 describe("reading the settings", () => {
-  const names = ["Design & planning", "Code & tests", "Writing & docs", "Tooling & workflow"];
+  const names = ["Design & planning", "Code & tests", "Writing & docs", "Tooling & workflow", "Learning & upskilling"];
 
-  const none = { rings: [], quadrants: [], query: "", archived: false };
+  const none = { rings: [], topics: [], query: "", archived: false };
 
   test("what cannot be read takes its default", () => {
-    assert.deepEqual(readSettings(null), { quadrants: names, tab: "library", filters: none });
-    assert.deepEqual(readSettings({ quadrants: "x", tab: "nowhere", filters: [] }), { quadrants: names, tab: "library", filters: none });
+    assert.deepEqual(readSettings(null), { topics: names, tab: "library", filters: none });
+    assert.deepEqual(readSettings({ topics: "x", tab: "nowhere", filters: [] }), { topics: names, tab: "library", filters: none });
   });
 
   test("the tab and the filters are kept", () => {
-    const filters = { rings: ["try"], quadrants: [2], query: "tdd", archived: true };
-    assert.deepEqual(readSettings({ tab: "radar", filters }), { quadrants: names, tab: "radar", filters });
+    const filters = { rings: ["try"], topics: [2], query: "tdd", archived: true };
+    assert.deepEqual(readSettings({ tab: "radar", filters }), { topics: names, tab: "radar", filters });
   });
 
-  test("a quadrant is named without the spaces around it; a blank or too long name takes its default", () => {
-    const settings = readSettings({ quadrants: ["  Mine ", "   ", "x".repeat(41), 3] });
-    assert.deepEqual(settings.quadrants, ["Mine", names[1], names[2], names[3]]);
-    assert.equal(readSettings({ quadrants: ["x".repeat(40)] }).quadrants[0], "x".repeat(40));
+  test("a topic is named without the spaces around it; a blank or too long name takes its default", () => {
+    const settings = readSettings({ topics: ["  Mine ", "   ", "x".repeat(41), 3] });
+    assert.deepEqual(settings.topics, ["Mine", names[1], names[2], names[3], names[4]]);
+    assert.equal(readSettings({ topics: ["x".repeat(40)] }).topics[0], "x".repeat(40));
+  });
+
+  test("the fifth topic is read with its name", () => {
+    assert.equal(readSettings({ topics: ["A", "B", "C", "D", " Fifth "] }).topics[4], "Fifth");
+  });
+
+  test("the four quadrants of an older Library keep their index and the fifth topic takes its default", () => {
+    const settings = readSettings({ quadrants: ["One", "Two", "Three", "Four"] });
+    assert.deepEqual(settings.topics, ["One", "Two", "Three", "Four", names[4]]);
+  });
+
+  test("the topics win over the old quadrants when both are stored", () => {
+    assert.equal(readSettings({ topics: ["New"], quadrants: ["Old"] }).topics[0], "New");
+  });
+
+  test("the old filters on quadrants become filters on the topics at the same index", () => {
+    const filters = { rings: [], quadrants: [3, 1], query: "", archived: false };
+    assert.deepEqual(readSettings({ filters }).filters.topics, [3, 1]);
+    assert.deepEqual(readFilters({ quadrants: [0, 4, 5] }).topics, [0, 4]);
   });
 });
 
@@ -200,12 +224,13 @@ describe("editing a set", () => {
     assert.equal(editSet(list, "a", {}, now) && (editSet(list, "a", {}, now) as { set: SkillSet }).set, list[0]);
   });
 
-  test("a quadrant or a ring that does not exist is ignored", () => {
-    const result = editSet(list, "a", { quadrant: 4, ring: "adopt" as never }, now);
+  test("a topic or a ring that does not exist is ignored", () => {
+    const result = editSet(list, "a", { quadrant: 5, ring: "adopt" as never }, now);
     assert.ok(result && "set" in result);
     assert.equal(result.set, list[0]);
     assert.equal((editSet(list, "a", { quadrant: -1 }, now) as { set: SkillSet }).set, list[0]);
     assert.equal((editSet(list, "a", { quadrant: 3 }, now) as { set: SkillSet }).set.quadrant, 3);
+    assert.equal((editSet(list, "a", { quadrant: 4 }, now) as { set: SkillSet }).set.quadrant, 4);
   });
 
   test("the name, the description and the notes are kept as typed, only clipped", () => {
@@ -260,20 +285,20 @@ describe("reading the filters", () => {
   });
 
   test("nothing, or something that is not an object, is no filtering", () => {
-    for (const stored of [null, undefined, "x", 3, []]) assert.deepEqual(readFilters(stored), { rings: [], quadrants: [], query: "", archived: false });
+    for (const stored of [null, undefined, "x", 3, []]) assert.deepEqual(readFilters(stored), { rings: [], topics: [], query: "", archived: false });
   });
 
-  test("an unknown ring, a quadrant out of range and a duplicate are dropped", () => {
-    assert.deepEqual(readFilters({ rings: ["try", "adopt", "try", 3, "watch"], quadrants: [1, 4, 1, -1, 2.5, "0", 3], query: "tdd" }), {
+  test("an unknown ring, a topic out of range and a duplicate are dropped", () => {
+    assert.deepEqual(readFilters({ rings: ["try", "adopt", "try", 3, "watch"], topics: [1, 5, 1, -1, 2.5, "0", 4], query: "tdd" }), {
       rings: ["try", "watch"],
-      quadrants: [1, 3],
+      topics: [1, 4],
       query: "tdd",
       archived: false,
     });
   });
 
   test("a value of the wrong kind takes its default", () => {
-    assert.deepEqual(readFilters({ rings: "try", quadrants: 1, query: 3 }), { rings: [], quadrants: [], query: "", archived: false });
+    assert.deepEqual(readFilters({ rings: "try", topics: 1, query: 3 }), { rings: [], topics: [], query: "", archived: false });
   });
 });
 
@@ -286,7 +311,7 @@ describe("filtering the library", () => {
     set("d", at, { name: "Old plan", ring: "try", quadrant: 0, archived: true }),
   ];
   const by = (filters: Partial<Parameters<typeof filterSets>[1]>) =>
-    filterSets(list, { rings: [], quadrants: [], query: "", archived: false, ...filters }).map((item) => item.id);
+    filterSets(list, { rings: [], topics: [], query: "", archived: false, ...filters }).map((item) => item.id);
 
   test("no filter keeps every set that is not archived, in its order", () => {
     assert.deepEqual(by({}), ["a", "b", "c"]);
@@ -304,12 +329,17 @@ describe("filtering the library", () => {
     assert.deepEqual(by({ rings: ["deprecated"] }), []);
   });
 
-  test("several quadrants keep the sets of any of them", () => {
-    assert.deepEqual(by({ quadrants: [0, 2] }), ["a", "c"]);
+  test("several topics keep the sets of any of them", () => {
+    assert.deepEqual(by({ topics: [0, 2] }), ["a", "c"]);
   });
 
-  test("the rings and the quadrants together keep the sets that match both", () => {
-    assert.deepEqual(by({ rings: ["try"], quadrants: [2] }), ["a"]);
+  test("the fifth topic keeps its sets", () => {
+    const fifth = [...list, set("e", at, { name: "Learn", quadrant: 4 })];
+    assert.deepEqual(filterSets(fifth, { rings: [], topics: [4], query: "", archived: false }).map((item) => item.id), ["e"]);
+  });
+
+  test("the rings and the topics together keep the sets that match both", () => {
+    assert.deepEqual(by({ rings: ["try"], topics: [2] }), ["a"]);
   });
 
   test("the search finds a part of the name, ignoring case and accents", () => {
@@ -356,22 +386,26 @@ describe("deleting a set", () => {
   });
 });
 
-describe("renaming a quadrant", () => {
-  const names: [string, string, string, string] = ["A", "B", "C", "D"];
+describe("renaming a topic", () => {
+  const names: Topics = ["A", "B", "C", "D", "E"];
 
   test("gives the names with the new one in place, trimmed, and leaves the old ones as they were", () => {
-    assert.deepEqual(renameQuadrant(names, 2, "  Mine "), ["A", "B", "Mine", "D"]);
-    assert.deepEqual(names, ["A", "B", "C", "D"]);
-    assert.deepEqual(renameQuadrant(names, 0, "x".repeat(40)), ["x".repeat(40), "B", "C", "D"]);
+    assert.deepEqual(renameTopic(names, 2, "  Mine "), ["A", "B", "Mine", "D", "E"]);
+    assert.deepEqual(names, ["A", "B", "C", "D", "E"]);
+    assert.deepEqual(renameTopic(names, 0, "x".repeat(40)), ["x".repeat(40), "B", "C", "D", "E"]);
   });
 
   test("a blank name, or one longer than 40 characters, is refused", () => {
-    assert.equal(renameQuadrant(names, 1, "   "), null);
-    assert.equal(renameQuadrant(names, 1, "x".repeat(41)), null);
+    assert.equal(renameTopic(names, 1, "   "), null);
+    assert.equal(renameTopic(names, 1, "x".repeat(41)), null);
   });
 
-  test("a quadrant that does not exist is refused", () => {
-    for (const index of [-1, 4, 1.5]) assert.equal(renameQuadrant(names, index, "Mine"), null);
+  test("the fifth topic can be renamed", () => {
+    assert.deepEqual(renameTopic(names, 4, "Mine"), ["A", "B", "C", "D", "Mine"]);
+  });
+
+  test("a topic that does not exist is refused", () => {
+    for (const index of [-1, 5, 1.5]) assert.equal(renameTopic(names, index, "Mine"), null);
   });
 });
 
@@ -591,7 +625,7 @@ describe("reading the skills of a set", () => {
 describe("filtering the library by the skills of its sets", () => {
   const at = "2026-10-01T00:00:00.000Z";
   const list = [set("a", at, { name: "Planning", skills: [skillOf("s1", { name: "Écrire un ADR" })] }), set("b", at, { name: "Tests" })];
-  const by = (query: string) => filterSets(list, { rings: [], quadrants: [], query, archived: false }).map((item) => item.id);
+  const by = (query: string) => filterSets(list, { rings: [], topics: [], query, archived: false }).map((item) => item.id);
 
   test("the search finds a set by the name of one of its skills, ignoring case and accents", () => {
     assert.deepEqual(by("ecrire"), ["a"]);

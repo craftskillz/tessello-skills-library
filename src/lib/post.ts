@@ -53,7 +53,7 @@ export function renderPost(edition: Edition): string {
     "---",
   ].join("\n");
 
-  const sections = [edition.intro.trim(), renderRadar(edition.entries, edition.quadrants, { labels: POST_RADAR_LABELS })];
+  const sections = [edition.intro.trim(), renderRadar(edition.entries, edition.topics, { labels: POST_RADAR_LABELS })];
   if (entries.length > 0) sections.push(entries.map((entry) => `${entry.number}. ${markdownText(entry.name)} — ${FRENCH_RINGS[entry.ring]} (${skillCount(entry)})`).join("\n"));
   if (moved.length > 0) sections.push("## Ce qui bouge", ...byRing(moved, card));
   if (rest.length > 0) sections.push("## Le reste du radar", ...byRing(rest, compactList));

@@ -3,8 +3,8 @@
   import { changesSince } from "../lib/changes.ts";
   import { type DiscoveredSkill, discoverSkills, parseSkillUrl, skillsOf } from "../lib/github.ts";
   import { t, type MessageKey } from "../lib/i18n.ts";
-  import { type Filters, filterSets, findDuplicate, linkOf, newestFirst, type Ring, RINGS, type SkillSet, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX, QUADRANT_NAME_MAX } from "../lib/skills.ts";
-  import { addSet, editions, importSet, load, renameQuadrant, setFilters, setTab, sets, settings, status } from "../lib/store.svelte.ts";
+  import { type Filters, filterSets, findDuplicate, linkOf, newestFirst, type Ring, RINGS, type SkillSet, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX, TOPIC_NAME_MAX } from "../lib/skills.ts";
+  import { addSet, editions, importSet, load, renameTopic, setFilters, setTab, sets, settings, status } from "../lib/store.svelte.ts";
   import { changeTag, skillCountLabel } from "./change-tag.ts";
   import EditionsTab from "./EditionsTab.svelte";
   import EditPanel from "./EditPanel.svelte";
@@ -14,7 +14,7 @@
 
   const shown = $derived(filterSets(newestFirst(sets.list), settings.filters));
   const changes = $derived(changesSince(sets.list, editions.published));
-  const filtered = $derived(settings.filters.rings.length > 0 || settings.filters.quadrants.length > 0 || settings.filters.query.trim() !== "");
+  const filtered = $derived(settings.filters.rings.length > 0 || settings.filters.topics.length > 0 || settings.filters.query.trim() !== "");
 
   let adding = $state(false);
   let name = $state("");
@@ -32,7 +32,7 @@
   let highlightTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** No filter on, with the archived skills shown or not. */
-  const cleared = (archived: boolean): Filters => ({ rings: [], quadrants: [], query: "", archived });
+  const cleared = (archived: boolean): Filters => ({ rings: [], topics: [], query: "", archived });
 
   /** Highlights the row of a set a moment, and scrolls to it; filters that hide it are cleared, and archived sets shown when it is one. */
   async function show(set: SkillSet) {
@@ -70,19 +70,19 @@
     return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
   }
 
-  // The names of the quadrants being typed, which can differ from the saved ones while one is blank.
+  // The names of the topics being typed, which can differ from the saved ones while one is blank.
   let renaming = $state(false);
-  let quadrantNames = $state<string[]>([]);
-  let quadrantErrors = $state<boolean[]>([false, false, false, false]);
+  let topicNames = $state<string[]>([]);
+  let topicErrors = $state<boolean[]>([false, false, false, false, false]);
 
   function openRename() {
-    quadrantNames = [...settings.quadrants];
-    quadrantErrors = [false, false, false, false];
+    topicNames = [...settings.topics];
+    topicErrors = [false, false, false, false, false];
     renaming = true;
   }
 
-  function typeQuadrant(index: number) {
-    quadrantErrors[index] = !renameQuadrant(index, quadrantNames[index]);
+  function typeTopic(index: number) {
+    topicErrors[index] = !renameTopic(index, topicNames[index]);
   }
 
   // The field to paste a GitHub URL in, and what it answers.
@@ -213,7 +213,7 @@
       </div>
       <div class="sl-actions">
         {#if settings.tab === "library"}
-          <button type="button" class="sl-btn" onclick={openRename}>{t("rename_quadrants")}</button>
+          <button type="button" class="sl-btn" onclick={openRename}>{t("rename_topics")}</button>
         {/if}
         <button type="button" class="sl-btn sl-btn--primary" onclick={() => openForm()}>{t("new_set")}</button>
       </div>
@@ -268,15 +268,15 @@
                 </button>
               {/each}
             </div>
-            <div class="sl-chips" role="group" aria-label={t("filter_quadrants")}>
-              {#each settings.quadrants as quadrant, index (index)}
+            <div class="sl-chips" role="group" aria-label={t("filter_topics")}>
+              {#each settings.topics as topic, index (index)}
                 <button
                   type="button"
                   class="sl-chip"
-                  aria-pressed={settings.filters.quadrants.includes(index)}
-                  onclick={() => setFilters({ ...settings.filters, quadrants: toggle(settings.filters.quadrants, index).sort((a, b) => a - b) })}
+                  aria-pressed={settings.filters.topics.includes(index)}
+                  onclick={() => setFilters({ ...settings.filters, topics: toggle(settings.filters.topics, index).sort((a, b) => a - b) })}
                 >
-                  {quadrant}
+                  {topic}
                 </button>
               {/each}
             </div>
@@ -308,7 +308,7 @@
                 <button type="button" class="sl-btn" aria-label={t("edit_set", { name: set.name })} onclick={() => (editing = set.id)}>✎</button>
                 <span class="sl-ring sl-ring--{set.ring}">{t(`ring_${set.ring}` as MessageKey)}</span>
                 <span class="sl-count">{skillCountLabel(set)}</span>
-                <span class="sl-quadrant">{settings.quadrants[set.quadrant]}</span>
+                <span class="sl-topic">{settings.topics[set.quadrant]}</span>
                 {#if tag}<span class="sl-tag">{tag}</span>{/if}
                 {#if set.archived}<span class="sl-tag">{t("archived_tag")}</span>{/if}
               </li>
@@ -333,22 +333,22 @@
     {/key}
   {/if}
 
-  <Modal open={renaming} title={t("rename_quadrants")} onClose={() => (renaming = false)}>
+  <Modal open={renaming} title={t("rename_topics")} onClose={() => (renaming = false)}>
     <div class="sl-form">
-      {#each quadrantNames as _, index (index)}
+      {#each topicNames as _, index (index)}
         <div class="sl-field">
-          <label for="sl-quadrant-{index}">{t("quadrant_n", { n: index + 1 })}</label>
+          <label for="sl-topic-{index}">{t("topic_n", { n: index + 1 })}</label>
           <input
-            id="sl-quadrant-{index}"
+            id="sl-topic-{index}"
             type="text"
             required
-            maxlength={QUADRANT_NAME_MAX}
+            maxlength={TOPIC_NAME_MAX}
             autocomplete="off"
-            aria-invalid={quadrantErrors[index] ? "true" : undefined}
-            bind:value={quadrantNames[index]}
-            oninput={() => typeQuadrant(index)}
+            aria-invalid={topicErrors[index] ? "true" : undefined}
+            bind:value={topicNames[index]}
+            oninput={() => typeTopic(index)}
           />
-          {#if quadrantErrors[index]}<span class="sl-error" role="alert">{t("quadrant_required")}</span>{/if}
+          {#if topicErrors[index]}<span class="sl-error" role="alert">{t("topic_required")}</span>{/if}
         </div>
       {/each}
     </div>
@@ -581,7 +581,7 @@
     color: var(--accent-strong);
   }
   .sl-ring,
-  .sl-quadrant {
+  .sl-topic {
     font-size: 12px;
     color: var(--muted);
   }

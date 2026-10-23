@@ -4,7 +4,7 @@
 import { changesSince, hasSkillChanges, lastEdition, type Change, type ComparedEdition, type SkillChanges } from "./changes.ts";
 import type { RadarEntry } from "./radar.ts";
 import { legacySkillId } from "./migration.ts";
-import { DEFAULT_QUADRANTS, integerBetween, record, RINGS, text, type Ring, type Settings, type SkillSet } from "./skills.ts";
+import { DEFAULT_TOPICS, integerBetween, record, RINGS, text, type Ring, type SkillSet, type Topics } from "./skills.ts";
 
 /** A skill of a set as an edition froze it. */
 export interface EditionSkill {
@@ -44,8 +44,8 @@ export interface Edition {
   publishedAt: string;
   /** Markdown. */
   intro: string;
-  /** The names of the quadrants when it was published. */
-  quadrants: Settings["quadrants"];
+  /** The names of the topics when it was published: five, or four for an edition published before there were five. */
+  topics: string[];
   /** A set per set not archived. */
   entries: EditionEntry[];
   retired: RetiredEntry[];
@@ -73,13 +73,13 @@ export function missingReasons(sets: readonly SkillSet[], editions: readonly Com
 }
 
 /**
- * Publishes the next edition of the sets at the date `now`, with the names of the quadrants and the introduction (which
+ * Publishes the next edition of the sets at the date `now`, with the names of the topics and the introduction (which
  * is trimmed and required). It is refused, with nothing published, while a moved set has no explanation. The sets it
  * answers are the ones given without any explanation of a move, the others being the same objects.
  */
 export function publishEdition(
   sets: readonly SkillSet[],
-  quadrants: Settings["quadrants"],
+  topics: Topics,
   editions: readonly Edition[],
   intro: string,
   now: Date,
@@ -101,7 +101,7 @@ export function publishEdition(
     number: nextNumber(editions),
     publishedAt: now.toISOString(),
     intro: trimmed,
-    quadrants: [...quadrants],
+    topics: [...topics],
     entries,
     retired,
   };
@@ -162,13 +162,15 @@ export function readEdition(stored: unknown): Edition | null {
   const number = integerBetween(value.number, 1, Number.MAX_SAFE_INTEGER);
   const publishedAt = readableDate(value.publishedAt);
   if (number === undefined || !publishedAt) return null;
-  const names = Array.isArray(value.quadrants) ? value.quadrants : [];
-  const quadrants = DEFAULT_QUADRANTS.map((fallback, index) => text(names[index])?.trim() || fallback) as Settings["quadrants"];
+  // An edition published with four quadrants keeps its four sectors: only a new one has five topics.
+  const old = !Array.isArray(value.topics);
+  const names = Array.isArray(value.topics) ? value.topics : Array.isArray(value.quadrants) ? value.quadrants : [];
+  const topics = DEFAULT_TOPICS.slice(0, old ? 4 : 5).map((fallback, index) => text(names[index])?.trim() || fallback);
   return {
     number,
     publishedAt,
     intro: text(value.intro) ?? "",
-    quadrants,
+    topics,
     entries: readAll(value.entries, readEntry),
     retired: readAll(value.retired, readRetired),
   };
@@ -210,7 +212,7 @@ function readEntry(stored: unknown): EditionEntry | null {
     name,
     ...(sourceUrl ? { sourceUrl } : {}),
     description,
-    quadrant: integerBetween(value.quadrant, 0, 3) ?? 0,
+    quadrant: integerBetween(value.quadrant, 0, 4) ?? 0,
     ring: RINGS.find((ring) => ring === value.ring) ?? "watch",
     notes: old ? "" : (text(value.notes) ?? ""),
     skills: old

@@ -23,7 +23,7 @@ const edition = (number: number, publishedAt: string, ...published: SkillSet[]):
   number,
   publishedAt,
   intro: "Intro",
-  quadrants: ["A", "B", "C", "D"],
+  topics: ["A", "B", "C", "D", "E"],
   entries: published.map((s) => ({
     id: s.id,
     name: s.name,
