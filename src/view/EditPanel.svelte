@@ -7,6 +7,7 @@
   import { canDelete, DESCRIPTION_MAX, NAME_MAX, RINGS, type Skill, type SetEdit } from "../lib/skills.ts";
   import { addSkill, editions, editSet, refreshSet, remove, removeSkill, sets, settings } from "../lib/store.svelte.ts";
   import Modal from "./Modal.svelte";
+  import { failureMessage } from "./github-failure.ts";
   import SkillSection from "./SkillSection.svelte";
 
   let { id, onClose }: { id: string; onClose: () => void } = $props();
@@ -100,26 +101,27 @@
 
   // The refresh from GitHub: whether it is under way, and what it said.
   let refreshing = $state(false);
-  let refreshed = $state({ text: "", failed: false });
-  const failures = { not_a_skill_url: "not_a_skill_url", not_found: "url_not_found", rate_limited: "rate_limited", network: "url_unreadable", empty: "refresh_empty" } as const;
+  let refreshOutcome = $state({ text: "", failed: false });
   /** The refresh button needs the url the set has saved, not the one being typed. */
   const refreshable = $derived(parseSkillUrl(set?.sourceUrl ?? "") !== null);
 
   async function refresh() {
     refreshing = true;
-    refreshed = { text: "", failed: false };
+    refreshOutcome = { text: "", failed: false };
     const result = await refreshSet(id);
     refreshing = false;
     if (!result) return;
     if ("error" in result) {
-      refreshed = { text: t(failures[result.error]), failed: true };
+      const { error } = result;
+      const text = error === "not_a_skill_url" ? t("not_a_skill_url") : error === "empty" ? t("refresh_empty") : failureMessage(error);
+      refreshOutcome = { text, failed: true };
       return;
     }
     const parts = [
       result.added === 1 ? t("refresh_added_one") : result.added > 1 ? t("refresh_added", { count: result.added }) : "",
       result.gone === 1 ? t("refresh_gone_one") : result.gone > 1 ? t("refresh_gone", { count: result.gone }) : "",
     ].filter(Boolean);
-    refreshed = { text: parts.length > 0 ? parts.join(", ") : t("refresh_up_to_date"), failed: false };
+    refreshOutcome = { text: parts.length > 0 ? parts.join(", ") : t("refresh_up_to_date"), failed: false };
   }
 
   /** Whether the dialog that asks to confirm a deletion is open. */
@@ -183,7 +185,7 @@
           <button type="button" class="sl-btn" disabled={refreshing} aria-busy={refreshing} onclick={refresh}>
             {refreshing ? t("refreshing") : t("refresh")}
           </button>
-          <span class={refreshed.failed ? "sl-error" : "sl-refresh-done"} role="status">{refreshed.text}</span>
+          <span class={refreshOutcome.failed ? "sl-error" : "sl-refresh-done"} role="status">{refreshOutcome.text}</span>
         </div>
       {/if}
       <label>

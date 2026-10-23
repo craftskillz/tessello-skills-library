@@ -1,13 +1,14 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { changesSince } from "../lib/changes.ts";
-  import { type DiscoveredSkill, discoverSkills, findDuplicate, parseSkillUrl } from "../lib/github.ts";
+  import { type DiscoveredSkill, discoverSkills, parseSkillUrl, skillsOf } from "../lib/github.ts";
   import { t, type MessageKey } from "../lib/i18n.ts";
-  import { type Filters, filterSets, linkOf, newestFirst, type Ring, RINGS, type SkillSet, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX, QUADRANT_NAME_MAX } from "../lib/skills.ts";
+  import { type Filters, filterSets, findDuplicate, linkOf, newestFirst, type Ring, RINGS, type SkillSet, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX, QUADRANT_NAME_MAX } from "../lib/skills.ts";
   import { addSet, editions, importSet, load, renameQuadrant, setFilters, setTab, sets, settings, status } from "../lib/store.svelte.ts";
   import { changeTag, skillCountLabel } from "./change-tag.ts";
   import EditionsTab from "./EditionsTab.svelte";
   import EditPanel from "./EditPanel.svelte";
+  import { failureMessage } from "./github-failure.ts";
   import Modal from "./Modal.svelte";
   import RadarTab from "./RadarTab.svelte";
 
@@ -99,8 +100,6 @@
   let preview = $state<{ url: string; skills: DiscoveredSkill[]; checked: boolean[]; name: string } | null>(null);
   const importable = $derived(preview !== null && preview.name.trim() !== "" && preview.checked.some(Boolean));
 
-  const failures = { not_found: "url_not_found", rate_limited: "rate_limited", network: "url_unreadable" } as const;
-
   /** Looks for the skills at the URL and previews them, unless the set is there already; what cannot be read leaves the User to add it by hand. */
   async function addFromUrl(text: string) {
     if (!text.trim()) return;
@@ -119,11 +118,11 @@
     const found = await discoverSkills(parsed);
     if (mine !== entry) return;
     if (found.kind === "error") {
-      notice = { text: t(failures[found.reason]), manualUrl: parsed.sourceUrl };
+      notice = { text: failureMessage(found.reason), manualUrl: parsed.sourceUrl };
     } else if (found.kind === "empty") {
       notice = { text: t("no_skill_found"), manualUrl: parsed.sourceUrl };
     } else {
-      const skills = found.kind === "set" ? found.skills : [found.skill];
+      const skills = skillsOf(found);
       notice = { text: "" };
       preview = { url: parsed.sourceUrl, skills, checked: skills.map(() => true), name: (found.kind === "set" ? parsed.repo : found.skill.name).slice(0, NAME_MAX) };
     }

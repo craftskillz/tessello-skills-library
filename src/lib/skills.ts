@@ -2,7 +2,7 @@
 // import or a hand-edited file may have written it: what cannot be read is skipped, and a missing value takes its
 // creation value.
 
-import { duplicateKey } from "./github.ts";
+import { type DiscoveredSkill, duplicateKey } from "./github.ts";
 
 /** The rings of the radar, from the centre outwards. */
 export const RINGS = ["recommended", "try", "watch", "deprecated"] as const;
@@ -404,3 +404,122 @@ export const text = (value: unknown) => (typeof value === "string" ? value : und
 export const date = (value: unknown) => (typeof value === "string" && !Number.isNaN(Date.parse(value)) ? new Date(value).toISOString() : undefined);
 export const integerBetween = (value: unknown, min: number, max: number) =>
   typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : undefined;
+
+// The sets that come from the same place as another, and the sets imported from GitHub or refreshed from it.
+
+/** The set, archived or not, that comes from the same place as `url`; none when `url` has no key. */
+export function findDuplicate(sets: readonly SkillSet[], url: string | undefined): SkillSet | undefined {
+  const key = duplicateKey(url);
+  return key === null ? undefined : sets.find((set) => duplicateKey(set.sourceUrl) === key);
+}
+
+/**
+ * `addSet`, but nothing is added when a set, archived or not, comes from the same place as the url of the draft: the
+ * answer is then that set.
+ */
+export function addUnlessDuplicate(
+  sets: readonly SkillSet[],
+  draft: Draft,
+  now: Date,
+  id: string,
+): { sets: SkillSet[]; set: SkillSet } | { duplicate: SkillSet } | null {
+  if (!draft.name.trim()) return null;
+  const duplicate = findDuplicate(sets, draft.url);
+  return duplicate ? { duplicate } : addSet(sets, draft, now, id);
+}
+
+/**
+ * `editSet`, but nothing is saved when the edit gives a url that another set, archived or not, already has: the answer
+ * is then that set. A set is never a duplicate of itself.
+ */
+export function editUnlessDuplicate(
+  sets: readonly SkillSet[],
+  id: string,
+  edit: SetEdit,
+  now: Date,
+  publishedRing?: Ring,
+): ReturnType<typeof editSet> | { duplicate: SkillSet } {
+  if (!sets.some((set) => set.id === id)) return null;
+  const duplicate = edit.sourceUrl === undefined ? undefined : findDuplicate(sets.filter((set) => set.id !== id), edit.sourceUrl);
+  return duplicate ? { duplicate } : editSet(sets, id, edit, now, publishedRing);
+}
+
+/**
+ * Adds a set named `draft.name`, whose url is `draft.url`, holding `skills` in their order; each is added as
+ * `addSkillToSet` does (not evaluated, the template as its notes, its folder as its url), and a skill whose url an earlier
+ * one has is left out. Null when the name is blank or there is no skill; the set, archived or not, that has the same url
+ * is the answer when there is one, and nothing is added then.
+ */
+export function importSet(
+  sets: readonly SkillSet[],
+  draft: Draft,
+  skills: readonly DiscoveredSkill[],
+  now: Date,
+  newId: () => string,
+): { sets: SkillSet[]; set: SkillSet } | { duplicate: SkillSet } | null {
+  if (skills.length === 0) return null;
+  const added = addUnlessDuplicate(sets, draft, now, newId());
+  if (!added || "duplicate" in added) return added;
+  const { sets: withSkills, set } = addFoundSkills(added.sets, added.set, skills, now, newId);
+  return { sets: withSkills, set };
+}
+
+/**
+ * Adds each skill found at the end of `set`, in their order, as `addSkillToSet` does: not evaluated, the template as its
+ * notes, its folder as its url. A skill whose url the set has already is left out, and `added` counts the others.
+ */
+function addFoundSkills(
+  sets: SkillSet[],
+  set: SkillSet,
+  found: readonly DiscoveredSkill[],
+  now: Date,
+  newId: () => string,
+): { sets: SkillSet[]; set: SkillSet; added: number } {
+  let result = { sets, set };
+  let added = 0;
+  for (const skill of found) {
+    // Not offered to `addSkillToSet` when the set has it, so that no id is spent on it.
+    if (skillWithUrl(result.set.skills, skill.sourceUrl)) continue;
+    const withSkill = addSkillToSet(result.sets, set.id, { name: skill.name, url: skill.sourceUrl, description: skill.description }, now, newId());
+    if (withSkill && !("error" in withSkill)) {
+      result = withSkill;
+      added++;
+    }
+  }
+  return { ...result, added };
+}
+
+/**
+ * The set `setId` against the skills found again under its url. A skill found that no skill of the set has (by url) is
+ * added at the end as `addSkillToSet` does. A skill of the set whose url is in the folder of the set and is not found any
+ * more is marked `goneUpstream` and kept as it is; one found again loses the mark. A skill with no url, or from outside
+ * the folder of the set, is never marked, and the names, descriptions, scores and notes are never touched. `added` counts
+ * the skills added, `gone` those newly marked (not the ones that already were). Nothing to change gives the same sets back.
+ * Null when there is no such set.
+ */
+export function refreshSet(
+  sets: readonly SkillSet[],
+  setId: string,
+  found: readonly DiscoveredSkill[],
+  now: Date,
+  newId: () => string,
+): { sets: SkillSet[]; set: SkillSet; added: number; gone: number } | null {
+  const current = sets.find((set) => set.id === setId);
+  if (!current) return null;
+  const foundKeys = new Set(found.map((skill) => duplicateKey(skill.sourceUrl)));
+  const folder = duplicateKey(current.sourceUrl);
+  let gone = 0;
+  const skills = current.skills.map((skill) => {
+    const key = duplicateKey(skill.sourceUrl);
+    if (key === null || folder === null || !key.startsWith(`${folder}/`)) return skill;
+    const missing = !foundKeys.has(key);
+    if (missing === (skill.goneUpstream === true)) return skill;
+    if (missing) gone++;
+    const { goneUpstream: _, ...rest } = skill;
+    return missing ? { ...rest, goneUpstream: true } : rest;
+  });
+  const marksChanged = skills.some((skill, index) => skill !== current.skills[index]);
+  const set = marksChanged ? { ...current, skills, updatedAt: now.toISOString() } : current;
+  const marked = marksChanged ? sets.map((item) => (item === current ? set : item)) : (sets as SkillSet[]);
+  return { ...addFoundSkills(marked, set, found, now, newId), gone };
+}

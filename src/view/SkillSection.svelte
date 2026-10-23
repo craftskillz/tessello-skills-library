@@ -2,6 +2,7 @@
   // One skill of the set being edited, as a section that unfolds: its fields, its score and its notes. Each change is
   // saved at once; what is refused is said under its field, and the field keeps what was typed.
   import { t, type MessageKey } from "../lib/i18n.ts";
+  import { stars } from "../lib/radar.ts";
   import { DESCRIPTION_MAX, NAME_MAX, type Skill } from "../lib/skills.ts";
   import { editSkill } from "../lib/store.svelte.ts";
 
@@ -39,7 +40,7 @@
     <span class="sl-skill-title">{skill.name}</span>
     {#if skill.goneUpstream}<span class="sl-skill-gone">{t("gone_upstream")}</span>{/if}
     {#if skill.score !== undefined}
-      <span class="sl-skill-score" role="img" aria-label={t("stars", { score: skill.score })}>{"★".repeat(skill.score)}{"☆".repeat(5 - skill.score)}</span>
+      <span class="sl-skill-score" role="img" aria-label={t("stars", { score: skill.score })}>{stars(skill.score)}</span>
     {:else}
       <span class="sl-skill-score sl-skill-score--none">{t("not_evaluated")}</span>
     {/if}

@@ -24,6 +24,9 @@ const SET_NOTES_LEVEL = 4;
 /** The level of the highest heading of the notes of a skill: one under its own. */
 const SKILL_NOTES_LEVEL = 5;
 
+/** A Markdown ATX heading: its marks, then its text with the space before it. */
+const ATX_HEADING = /^ {0,3}(#{1,6})([ \t].*)?$/;
+
 /** The name of the post, and of the folder of its images. */
 export const postSlug = (number: number) => `skills-radar-edition-${number}`;
 
@@ -150,7 +153,7 @@ function shiftNoteHeadings(notes: string, top: number): string {
       fence = { char: marker[0], size: marker.length };
       return;
     }
-    const heading = /^ {0,3}(#{1,6})([ \t].*)?$/.exec(line);
+    const heading = ATX_HEADING.exec(line);
     if (heading) headings.set(index, { level: heading[1].length, rest: heading[2] ?? "" });
   });
   if (headings.size === 0) return notes;
@@ -160,7 +163,7 @@ function shiftNoteHeadings(notes: string, top: number): string {
 }
 
 /** Whether notes say something: they hold more than ATX headings and blank lines, which is all the template of a new skill holds. */
-const hasContent = (notes: string) => notes.split("\n").some((line) => line.trim() && !/^ {0,3}#{1,6}([ \t].*)?$/.test(line));
+const hasContent = (notes: string) => notes.split("\n").some((line) => line.trim() && !ATX_HEADING.test(line));
 
 /** The first paragraph of a Markdown text: up to its first blank line. */
 const firstParagraph = (markdown: string) => markdown.trim().split(/\n[ \t]*\n/)[0];

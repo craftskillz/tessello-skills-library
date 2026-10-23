@@ -8,7 +8,7 @@ export interface Box {
 }
 
 /** The room kept between the point and the panel. */
-export const GAP = 6;
+const GAP = 6;
 
 /** The top left corner of the panel, in the coordinates of the bounds (whose origin is 0, 0): under the point, or above it when it does not fit. */
 export function placePanel(point: Box, panel: { width: number; height: number }, bounds: { width: number; height: number }): { left: number; top: number } {

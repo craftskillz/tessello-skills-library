@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { addUnlessDuplicate, discoverSkills, editUnlessDuplicate, defaultName, duplicateKey, fetchSkill, findDuplicate, importSet, parseSkillUrl, readSkillFrontmatter, refreshSet } from "../src/lib/github.ts";
-import { NOTES_TEMPLATE, type SkillSet } from "../src/lib/skills.ts";
+import { defaultName, discoverSkills, duplicateKey, fetchSkill, parseSkillUrl, readSkillFrontmatter, skillsOf } from "../src/lib/github.ts";
 
 const tdd = {
   owner: "acme",
@@ -151,22 +150,7 @@ describe("the name a skill takes when its SKILL.md gives none", () => {
   });
 });
 
-const set = (id: string, sourceUrl?: string, rest: Partial<SkillSet> = {}): SkillSet => ({
-  id,
-  name: `Set ${id}`,
-  ...(sourceUrl ? { sourceUrl } : {}),
-  description: "",
-  quadrant: 0,
-  ring: "watch",
-  notes: "",
-  skills: [],
-  addedAt: "2026-10-01T00:00:00.000Z",
-  updatedAt: "2026-10-01T00:00:00.000Z",
-  archived: false,
-  ...rest,
-});
-
-describe("telling a set is already in the Library", () => {
+describe("the key that tells two urls are the same place", () => {
   const FOLDER = "https://github.com/acme/skills/tree/main/tdd";
 
   test("the file, the folder and the raw URL of a set share one key, whatever the case of the owner and the repo", () => {
@@ -195,76 +179,6 @@ describe("telling a set is already in the Library", () => {
     assert.equal(duplicateKey("   "), null);
   });
 
-  test("the duplicate is the set with the same key, archived or not", () => {
-    const archived = set("b", "https://github.com/Acme/Skills/blob/main/tdd/SKILL.md", { archived: true });
-    const list = [set("a", "https://example.com"), archived, set("c")];
-    assert.equal(findDuplicate(list, "https://raw.githubusercontent.com/acme/skills/main/tdd/SKILL.md"), archived);
-    assert.equal(findDuplicate(list, "https://example.com/"), list[0]);
-  });
-
-  test("a set added by hand without a url is never a duplicate", () => {
-    const list = [set("a"), set("b", "https://example.com")];
-    assert.equal(findDuplicate(list, undefined), undefined);
-    assert.equal(findDuplicate(list, ""), undefined);
-    assert.equal(findDuplicate(list, "https://example.com/other"), undefined);
-  });
-});
-
-describe("adding a set that may be there already", () => {
-  const now = new Date("2026-10-22T10:00:00Z");
-
-  test("a new url is added first", () => {
-    const list = [set("a", "https://example.com")];
-    const result = addUnlessDuplicate(list, { name: "TDD", url: "https://github.com/acme/skills/tree/main/tdd" }, now, "b");
-    assert.ok(result && "set" in result);
-    assert.deepEqual(result.sets.map((item) => item.id), ["b", "a"]);
-  });
-
-  test("a url that is there already, archived or not, adds nothing and gives the set that has it", () => {
-    const archived = set("a", "https://github.com/Acme/Skills/blob/main/tdd/SKILL.md", { archived: true });
-    const result = addUnlessDuplicate([archived], { name: "Again", url: "https://github.com/acme/skills/tree/main/tdd" }, now, "b");
-    assert.deepEqual(result, { duplicate: archived });
-  });
-
-  test("a blank name adds nothing and is no duplicate", () => {
-    assert.equal(addUnlessDuplicate([], { name: " " }, now, "b"), null);
-  });
-});
-
-describe("editing a set that may take the url of another", () => {
-  const now = new Date("2026-10-23T09:00:00Z");
-  const other = set("b", "https://github.com/acme/skills/tree/main/tdd", { archived: true });
-  const list = [set("a", "https://example.com"), other, set("c")];
-
-  test("a url that another set has, archived or not, saves nothing and gives that skill", () => {
-    assert.deepEqual(editUnlessDuplicate(list, "a", { sourceUrl: "github.com/Acme/Skills/blob/main/tdd/SKILL.md", ring: "try" }, now), { duplicate: other });
-  });
-
-  test("a new url is saved", () => {
-    const result = editUnlessDuplicate(list, "a", { sourceUrl: "https://example.com/new" }, now);
-    assert.ok(result && "set" in result);
-    assert.equal(result.set.sourceUrl, "https://example.com/new");
-  });
-
-  test("a set is never a duplicate of itself", () => {
-    const result = editUnlessDuplicate(list, "b", { sourceUrl: "https://raw.githubusercontent.com/acme/skills/main/tdd/SKILL.md", ring: "try" }, now);
-    assert.ok(result && "set" in result);
-    assert.equal(result.set.ring, "try");
-  });
-
-  test("a blank url has no key, so it is no duplicate of the sets without a url", () => {
-    const result = editUnlessDuplicate(list, "a", { sourceUrl: "  " }, now);
-    assert.ok(result && "set" in result);
-    assert.equal("sourceUrl" in result.set, false);
-  });
-
-  test("an edit without a url, an unknown id and the errors of the edit come through as they are", () => {
-    assert.equal(editUnlessDuplicate(list, "zzz", { sourceUrl: "https://example.com" }, now), null);
-    assert.deepEqual(editUnlessDuplicate(list, "a", { name: " " }, now), { error: "name_required" });
-    const result = editUnlessDuplicate(list, "a", { notes: "n" }, now);
-    assert.ok(result && "set" in result);
-    assert.equal(result.set.notes, "n");
-  });
 });
 
 describe("fetching a skill from GitHub", () => {
@@ -446,161 +360,13 @@ describe("discovering the skills under a GitHub URL", () => {
   });
 });
 
-describe("importing a set of the skills found", () => {
-  const found = [
-    { name: "Brainstorming", description: "Think first", sourceUrl: "https://github.com/obra/superpowers/tree/main/skills/brainstorming" },
-    { name: "TDD", description: "Red, green", sourceUrl: "https://github.com/obra/superpowers/tree/main/skills/tdd" },
-  ];
-  const draft = { name: "Superpowers", url: "https://github.com/obra/superpowers/tree/main/skills" };
-  const now = new Date("2026-05-01T10:00:00Z");
-  const ids = () => {
-    let next = 0;
-    return () => `id-${++next}`;
-  };
+describe("the skills a discovery found", () => {
+  const skill = { name: "TDD", description: "", sourceUrl: "https://github.com/acme/skills/tree/main/tdd" };
 
-  test("adds a set to watch, in the first quadrant, with the skills in their order, not evaluated, with the template as notes", () => {
-    const result = importSet([], draft, found, now, ids());
-    assert.ok(result && "set" in result);
-    const { set, sets } = result;
-    assert.deepEqual(sets, [set]);
-    assert.equal(set.id, "id-1");
-    assert.equal(set.name, "Superpowers");
-    assert.equal(set.sourceUrl, draft.url);
-    assert.deepEqual([set.ring, set.quadrant, set.notes, set.description, set.archived], ["watch", 0, "", "", false]);
-    assert.deepEqual(
-      set.skills.map(({ id, name, description, sourceUrl, notes, addedAt, score }) => ({ id, name, description, sourceUrl, notes, addedAt, score })),
-      found.map((skill, index) => ({ id: `id-${index + 2}`, ...skill, notes: NOTES_TEMPLATE, addedAt: now.toISOString(), score: undefined })),
-    );
-  });
-
-  test("goes first in the list of sets", () => {
-    const existing = importSet([], { name: "Old", url: "https://example.com/old" }, found, now, ids())!;
-    assert.ok("set" in existing);
-    const result = importSet(existing.sets, draft, found, now, () => crypto.randomUUID());
-    assert.ok(result && "set" in result);
-    assert.deepEqual(result.sets.map((set) => set.name), ["Superpowers", "Old"]);
-  });
-
-  test("a blank name or no skill imports nothing", () => {
-    assert.equal(importSet([], { ...draft, name: "  " }, found, now, ids()), null);
-    assert.equal(importSet([], draft, [], now, ids()), null);
-  });
-
-  test("a set, archived or not, from the same url is the duplicate and nothing is added", () => {
-    const first = importSet([], draft, found, now, ids())!;
-    assert.ok("set" in first);
-    const archived = first.sets.map((set) => ({ ...set, archived: true }));
-    const result = importSet(archived, { ...draft, url: "https://github.com/OBRA/superpowers/tree/main/skills/" }, found, now, ids());
-    assert.deepEqual(result, { duplicate: archived[0] });
-  });
-
-  test("two skills with the same url keep the first", () => {
-    const result = importSet([], draft, [found[0], { ...found[1], sourceUrl: found[0].sourceUrl }, found[1]], now, ids());
-    assert.ok(result && "set" in result);
-    assert.deepEqual(result.set.skills.map((skill) => skill.name), ["Brainstorming", "TDD"]);
-  });
-});
-
-describe("refreshing a set with the skills found again", () => {
-  const base = "https://github.com/obra/superpowers/tree/main/skills";
-  const found = (...names: string[]) => names.map((name) => ({ name, description: `About ${name}`, sourceUrl: `${base}/${name}` }));
-  const imported = new Date("2026-05-01T10:00:00Z");
-  const now = new Date("2026-06-01T10:00:00Z");
-  const ids = () => {
-    let next = 100;
-    return () => `new-${++next}`;
-  };
-  const start = (names: string[]) => {
-    const result = importSet([], { name: "Superpowers", url: base }, found(...names), imported, ids());
-    assert.ok(result && "set" in result);
-    return result;
-  };
-  const gone = (set: SkillSet) => set.skills.filter((skill) => skill.goneUpstream).map((skill) => skill.name);
-
-  test("a skill found that no skill of the set has is added at the end, not evaluated, with the template as notes", () => {
-    const { sets, set } = start(["tdd"]);
-    const result = refreshSet(sets, set.id, found("tdd", "debugging"), now, ids());
-    assert.ok(result);
-    assert.deepEqual([result.added, result.gone], [1, 0]);
-    assert.deepEqual(result.set.skills.map((skill) => skill.name), ["tdd", "debugging"]);
-    const added = result.set.skills[1];
-    assert.deepEqual([added.id, added.score, added.notes, added.sourceUrl, added.description, added.addedAt], ["new-101", undefined, NOTES_TEMPLATE, `${base}/debugging`, "About debugging", now.toISOString()]);
-    assert.equal(result.set.updatedAt, now.toISOString());
-    assert.deepEqual(result.sets, [result.set]);
-  });
-
-  test("a url spelled another way is the same skill", () => {
-    const { sets, set } = start(["tdd"]);
-    const result = refreshSet(sets, set.id, [{ name: "TDD", description: "", sourceUrl: "https://github.com/OBRA/Superpowers/tree/main/skills/tdd/" }], now, ids());
-    assert.ok(result);
-    assert.deepEqual([result.added, result.gone, result.set.skills.length], [0, 0, 1]);
-  });
-
-  test("a skill no longer found is kept, marked gone, with its name, score and notes", () => {
-    const { sets, set } = start(["tdd", "debugging"]);
-    const rated = { ...set, skills: set.skills.map((skill) => (skill.name === "tdd" ? { ...skill, score: 4, notes: "mine" } : skill)) };
-    const result = refreshSet([rated], set.id, found("debugging"), now, ids());
-    assert.ok(result);
-    assert.deepEqual([result.added, result.gone], [0, 1]);
-    assert.deepEqual(gone(result.set), ["tdd"]);
-    assert.deepEqual([result.set.skills[0].score, result.set.skills[0].notes, result.set.skills[0].name], [4, "mine", "tdd"]);
-  });
-
-  test("a skill found again loses the mark and is not counted", () => {
-    const { sets, set } = start(["tdd", "debugging"]);
-    const first = refreshSet(sets, set.id, found("debugging"), now, ids())!;
-    const again = refreshSet(first.sets, set.id, found("tdd", "debugging"), now, ids())!;
-    assert.deepEqual([again.added, again.gone, gone(again.set)], [0, 0, []]);
-    assert.ok(!again.set.skills.some((skill) => "goneUpstream" in skill));
-  });
-
-  test("a skill already gone and still gone is not counted again", () => {
-    const { sets, set } = start(["tdd", "debugging"]);
-    const first = refreshSet(sets, set.id, found("debugging"), now, ids())!;
-    const again = refreshSet(first.sets, set.id, found("debugging"), now, ids())!;
-    assert.deepEqual([again.added, again.gone, gone(again.set)], [0, 0, ["tdd"]]);
-  });
-
-  test("a skill without url, or with a url outside the folder of the set, is never marked", () => {
-    const { sets, set } = start(["tdd"]);
-    const withHand = {
-      ...set,
-      skills: [
-        ...set.skills,
-        { id: "hand", name: "By hand", description: "", notes: "", addedAt: imported.toISOString() },
-        { id: "far", name: "Elsewhere", sourceUrl: "https://github.com/other/repo/tree/main/x", description: "", notes: "", addedAt: imported.toISOString() },
-      ],
-    };
-    const result = refreshSet([withHand], set.id, found("tdd"), now, ids())!;
-    assert.deepEqual([result.added, result.gone, gone(result.set)], [0, 0, []]);
-  });
-
-  test("nothing new gives the same objects back and the same date", () => {
-    const { sets, set } = start(["tdd", "debugging"]);
-    const result = refreshSet(sets, set.id, found("debugging", "tdd"), now, ids())!;
-    assert.deepEqual([result.added, result.gone], [0, 0]);
-    assert.equal(result.sets, sets);
-    assert.equal(result.set, set);
-    assert.equal(result.set.updatedAt, imported.toISOString());
-  });
-
-  test("a mix of added, gone and unchanged skills; the other sets are untouched", () => {
-    const { sets, set } = start(["a", "b", "c"]);
-    const other = start(["z"]).set;
-    const result = refreshSet([...sets, other], set.id, found("b", "d", "e"), now, ids())!;
-    assert.deepEqual([result.added, result.gone], [2, 2]);
-    assert.deepEqual(result.set.skills.map((skill) => skill.name), ["a", "b", "c", "d", "e"]);
-    assert.deepEqual(gone(result.set), ["a", "c"]);
-    assert.equal(result.sets[1], other);
-  });
-
-  test("nothing found marks every skill that has a url", () => {
-    const { sets, set } = start(["a", "b"]);
-    const result = refreshSet(sets, set.id, [], now, ids())!;
-    assert.deepEqual([result.added, result.gone, gone(result.set)], [0, 2, ["a", "b"]]);
-  });
-
-  test("no such set is null", () => {
-    assert.equal(refreshSet([], "nope", [], now, ids()), null);
+  test("a set gives its skills, a single skill gives itself, and an empty or failed discovery gives none", () => {
+    assert.deepEqual(skillsOf({ kind: "set", skills: [skill, skill] }), [skill, skill]);
+    assert.deepEqual(skillsOf({ kind: "single", skill }), [skill]);
+    assert.deepEqual(skillsOf({ kind: "empty" }), []);
+    assert.deepEqual(skillsOf({ kind: "error", reason: "network" }), []);
   });
 });

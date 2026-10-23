@@ -4,15 +4,19 @@
 
 import type { ConnectedModule } from "@tessello/sdk";
 import { type Edition, publishEdition, publishedRing, summaryOf, withoutReasons } from "./editions.ts";
-import { addUnlessDuplicate, type DiscoveredSkill, discoverSkills, editUnlessDuplicate, importSet as importSetOf, parseSkillUrl, refreshSet as refreshSetOf } from "./github.ts";
+import { type DiscoveredSkill, discoverSkills, type GitHubFailure, parseSkillUrl, skillsOf } from "./github.ts";
 import { t } from "./i18n.ts";
 import {
   addSkillToSet,
+  addUnlessDuplicate,
   DEFAULT_QUADRANTS,
   deleteSet,
   type Draft,
   editSkillInSet,
+  editUnlessDuplicate,
   type Filters,
+  importSet as importSetOf,
+  refreshSet as refreshSetOf,
   removeSkillFromSet,
   renameQuadrant as renamed,
   type Settings,
@@ -105,7 +109,7 @@ export function addSet(draft: Draft): { added: SkillSet } | { duplicate: SkillSe
 }
 
 /** Imports a set of the skills found under a GitHub URL and saves it; the answers are `importSet`'s, null too while the sets cannot be read. */
-export function importSet(draft: { name: string; url: string }, skills: readonly DiscoveredSkill[]): { added: SkillSet } | { duplicate: SkillSet } | null {
+export function importSet(draft: Draft, skills: readonly DiscoveredSkill[]): { added: SkillSet } | { duplicate: SkillSet } | null {
   if (!status.loaded) return null;
   const result = importSetOf(sets.list, draft, skills, new Date(), () => crypto.randomUUID());
   if (!result) return null;
@@ -122,15 +126,14 @@ export function importSet(draft: { name: string; url: string }, skills: readonly
  * than a set whose every skill was removed): nothing is changed then. Null while the sets cannot be read or
  * when there is no such set.
  */
-export async function refreshSet(id: string): Promise<{ added: number; gone: number } | { error: "not_a_skill_url" | "not_found" | "rate_limited" | "network" | "empty" } | null> {
+export async function refreshSet(id: string): Promise<{ added: number; gone: number } | { error: GitHubFailure | "not_a_skill_url" | "empty" } | null> {
   if (!status.loaded) return null;
   const parsed = parseSkillUrl(sets.list.find((set) => set.id === id)?.sourceUrl ?? "");
   if (!parsed) return sets.list.some((set) => set.id === id) ? { error: "not_a_skill_url" } : null;
   const found = await discoverSkills(parsed);
   if (found.kind === "error") return { error: found.reason };
   if (found.kind === "empty") return { error: "empty" };
-  const skills = found.kind === "set" ? found.skills : [found.skill];
-  const result = refreshSetOf(sets.list, id, skills, new Date(), () => crypto.randomUUID());
+  const result = refreshSetOf(sets.list, id, skillsOf(found), new Date(), () => crypto.randomUUID());
   if (!result) return null;
   if (result.sets !== sets.list) {
     sets.list = result.sets;
