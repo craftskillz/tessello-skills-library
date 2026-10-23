@@ -4,13 +4,19 @@
 
 You keep **sets** in the **Library**. A set is a group of skills, usually a GitHub folder of them. The set has a ring, which is your verdict on it. Each of its skills has a score, notes and a topic. The radar draws the sets, with one point for each topic a set covers.
 
+![The Library, with sets in different rings and topics](images/library.png)
+
 Every change is saved the moment you make it. There is no Save button.
+
+To open this guide again, find **Skills Library** in Tessello's Launcher, click **About**, then **User guide**.
 
 ## Importing a set from GitHub
 
 Paste the GitHub URL of the folder that holds the skills in **Paste a GitHub URL**, at the top of the **Library**, or type it and press Enter. Every folder directly under that URL that has a `SKILL.md` is a skill. The Module lists the folder through `api.github.com` and reads each `SKILL.md` from `raw.githubusercontent.com`, the only two servers it contacts. A skill takes the name and the description its frontmatter gives. The URL of a single skill (its `SKILL.md`, or its folder) works too: it gives a set of one skill.
 
 An **Import a set** dialog then shows what was found, before anything is kept:
+
+![The GitHub import preview, with a topic and individual skills to select](images/import.png)
 
 - **Set name**: filled in with the name of the repository (the name of the skill when there is only one), and required. Change it as you like.
 - **Topic**: the topic given to **all** the skills you import. Pick the one that fits; you can change a skill's topic afterwards.
@@ -51,6 +57,10 @@ Open a skill's section to give it:
 - **Score**: one to five stars. Click a star, or use the arrow keys once a star is focused. **Clear** puts the skill back to **Not evaluated**.
 - **Notes**: free text in Markdown, up to 8,000 characters.
 
+![An open skill in its set's panel, with its topic, score and notes](images/skill.png)
+
+The **ring** and the **score** answer different questions. The ring is your recommendation for the whole set; a score is your assessment of one skill. A set in **Try** can contain a five-star skill and another you have not evaluated. Changing a score never changes the set's ring, and moving a set never changes its skills' scores. **Not evaluated** means you have not given that skill a score; it is not a zero-star rating.
+
 **Remove from set** takes a skill out of its set, after you confirm; its notes go with it.
 
 Each change is saved as you make it. Close the panel with **Close** or Escape. A change that cannot be saved says why under its field, and what you typed stays in place so you can fix it:
@@ -89,17 +99,21 @@ At the bottom of a set's panel, **Archive** takes the set off the **Library** wi
 
 ## The radar
 
+![The radar, with a panel showing the skills in one point's topic](images/radar.png)
+
 The **Radar** tab draws the radar of your next edition: every set that is not archived and holds at least one skill, as numbered points. The ring of the set gives the distance from the centre (Recommended, Try, Watch, Deprecated, from the centre outwards), and the topic gives the sector and the colour.
 
 A set has **one point for each topic its skills are in**. All its points carry the same number, the same ring and the same marker, and sit in the sector of their own topic. A set with skills in two topics has two points; a set with a single topic has one. A set without a skill is not on the radar. A point stays where it is until you change the ring of its set or the topic of a skill.
 
-The marker tells what changed since the last edition: a circle for a set unchanged or only updated, a diamond for a new set or one that is back, a triangle up (**Moved in**) for a set moved towards the centre and a triangle down (**Moved out**) for one moved away from it. The legend under the radar (beside it on a wide screen) lists the sets with the same numbers, with their ring, their topics and their number of skills.
+The marker tells what changed since the last edition: a circle for a set unchanged or only updated, a diamond for a new set or one that is back, a triangle up (**Moved in**) for a set moved towards the centre and a triangle down (**Moved out**) for one moved away from it. The legend under the radar (beside it on a wide screen) lists each set once, with the same number and its ring, grouped under the first topic its skills cover.
 
 **Hover a point** with the mouse, **tap** it on a touch screen, or reach it with **Tab** (the points follow their numbers, then their topics) to open a panel. It shows the set, its ring, the topic of this point and **only the skills of the set in this topic**, with their stars or **Not evaluated**. A set with two points opens a different panel on each, with different skills. Escape closes the panel.
 
 Click a point, or a line of the legend, or the name of the set in the panel, to open the set in the **Library**.
 
-Under the legend, **N changes waiting** lists what the next edition would announce: new sets, sets back, sets moved (**Moved: Try → Recommended**) and sets retired (**Retired (was Watch)**). Click one to open it; a retired set is archived, so the **Library** turns on **Show archived** to show it. Until you have published an edition, every set is new.
+Under the legend, **N changes waiting** lists what the next edition would announce: new sets, sets back, sets moved (**Moved: Try → Recommended**) and sets retired (**Retired (was Watch)**). Click one to open it. If the retired set is archived, the **Library** turns on **Show archived** to show it. Until you have published an edition, every set is new.
+
+For a set in the last edition that keeps its ring and at least one skill, changes to its notes or skills (adding or removing one, changing a score or notes) are marked **Updated**. They are included in the next edition, but do not add to the changes-waiting counter or require a movement explanation. Removing its last skill takes the set off the radar and counts as **Retired**. A set that returns after being absent from the last edition is **Back**; both changes count as waiting.
 
 ## Publishing an edition
 
@@ -117,7 +131,19 @@ The **Editions** tab lists the editions you published, the newest first: its num
 
 ## The widget
 
+![The Skills Library Widget on Tessello's Home](images/widget.png)
+
 The Home shows how many sets each ring holds (archived sets, and sets without a skill, are left out), the date of the last edition (or "No edition yet") and, when there are any, how many changes are waiting to be published. **Open** brings you to the page. The widget reads your sets again each time the Home comes back.
+
+## Network access and your data
+
+The two network Permissions let the Module read public GitHub repositories: **api.github.com** lists the folders to discover skills, and **raw.githubusercontent.com** supplies their `SKILL.md` files. Import and **Refresh from GitHub** need a connection. Private repositories and signing in to GitHub are not supported.
+
+The Module keeps the names, URLs and descriptions it reads, together with your rings, topics, scores, notes and editions, in your Modules folder. It does **not** keep or run the content of the skills. To use a skill with your agent, follow its URL and that agent's installation instructions. Your saved Library, radar and editions remain available offline; reading a linked GitHub page needs a connection.
+
+Uninstalling Skills Library deletes its saved sets, skills, scores, notes and editions. To keep them, use Tessello's **Export your space** before uninstalling. An edition's blog `.zip` is for publishing, rather than restoring your Library.
+
+If the Module cannot read your saved data, it blocks adding sets and offers **Try again**. If a change cannot be saved, an error explains why: the change stays on screen but will be lost when you leave. Keep a copy of what you typed before leaving or reloading, and resolve the error before continuing.
 
 ## The tabs
 
