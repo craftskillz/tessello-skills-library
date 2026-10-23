@@ -62,16 +62,15 @@ export function legacySkillId(setId: string): string {
   return `${setId}-skill`;
 }
 
-/** The sets the old skills under the key `skills` become: each one a set of one skill, which takes its score and its notes. */
+/** The sets the old skills under the key `skills` become: each one a set of one skill, which takes its score, its notes and, as its topic, the old quadrant. */
 export function migrateLegacySkills(stored: unknown): SkillSet[] {
   return readLegacySkills(stored).map((old) => {
     const { score, notes, quadrant, ring, updatedAt, archived, moveReason, ...shared } = old;
     return {
       ...shared,
-      quadrant,
       ring,
       notes: "",
-      skills: [{ ...shared, id: legacySkillId(old.id), score, notes }],
+      skills: [{ ...shared, id: legacySkillId(old.id), score, notes, topic: quadrant }],
       updatedAt,
       archived,
       ...(moveReason ? { moveReason } : {}),

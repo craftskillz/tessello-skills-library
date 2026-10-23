@@ -1,7 +1,7 @@
 // What distinguishes the skills from the last edition: the changes the radar marks and the count of those waiting to be
 // published.
 
-import { RINGS, type Ring, type SkillSet } from "./skills.ts";
+import { isOnRadar, RINGS, type Ring, type SkillSet } from "./skills.ts";
 
 /** The skills of a set an edition published, as far as the changes are concerned. */
 export interface ComparedSkill {
@@ -38,7 +38,10 @@ export const hasSkillChanges = (skills: SkillChanges) => skills.added.length + s
 export const lastEdition = <T extends { number: number }>(editions: readonly T[]) =>
   editions.reduce<T | undefined>((best, edition) => (!best || edition.number > best.number ? edition : best), undefined);
 
-/** The change of each set since the last edition, by id. */
+/**
+ * The change of each set since the last edition, by id. A set is on the radar when it is not archived and has a skill: one
+ * that is not is retired if the last edition had it, and otherwise unchanged. The topic of a skill is not compared.
+ */
 export function changesSince(sets: readonly SkillSet[], editions: readonly ComparedEdition[]): Map<string, Change> {
   const last = lastEdition(editions);
   const changes = new Map<string, Change>();
@@ -55,12 +58,13 @@ function changeOf(
   editions: readonly ComparedEdition[],
   last: ComparedEdition | undefined,
 ): Change {
+  // A set with no skill is off the radar, as an archived one is.
   if (!previous) {
-    if (set.archived) return { kind: "unchanged" };
+    if (!isOnRadar(set)) return { kind: "unchanged" };
     const before = editions.some((edition) => edition !== last && edition.entries.some((entry) => entry.id === set.id));
     return { kind: before ? "back" : "new" };
   }
-  if (set.archived) return { kind: "retired", previousRing: previous.ring };
+  if (!isOnRadar(set)) return { kind: "retired", previousRing: previous.ring };
   const { changes: skills, notesChanged } = compareSkills(set, previous);
   if (set.ring !== previous.ring) {
     const towards = RINGS.indexOf(set.ring) < RINGS.indexOf(previous.ring) ? "recommended" : "deprecated";

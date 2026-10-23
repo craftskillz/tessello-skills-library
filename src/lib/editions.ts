@@ -4,7 +4,7 @@
 import { changesSince, hasSkillChanges, lastEdition, type Change, type ComparedEdition, type SkillChanges } from "./changes.ts";
 import type { RadarEntry } from "./radar.ts";
 import { legacySkillId } from "./migration.ts";
-import { DEFAULT_TOPICS, integerBetween, record, RINGS, text, type Ring, type SkillSet, type Topics } from "./skills.ts";
+import { DEFAULT_TOPICS, integerBetween, isOnRadar, record, RINGS, text, type Ring, type SkillSet, type Topics } from "./skills.ts";
 
 /** A skill of a set as an edition froze it. */
 export interface EditionSkill {
@@ -15,9 +15,14 @@ export interface EditionSkill {
   /** 1 to 5; absent when the skill was not evaluated. */
   score?: number;
   notes: string;
+  /** The index of its topic, 0 to 4. */
+  topic: number;
 }
 
-/** A set as an edition froze it. Its shape extends the radar's, so that the radar of an edition draws its entries as they are. */
+/**
+ * A set as an edition froze it. Its shape extends the radar's, so that the radar of an edition draws its entries as they are.
+ * It has no topic of its own: it is in the topics of its skills.
+ */
 export interface EditionEntry extends RadarEntry {
   sourceUrl?: string;
   description: string;
@@ -46,7 +51,7 @@ export interface Edition {
   intro: string;
   /** The names of the topics when it was published: five, or four for an edition published before there were five. */
   topics: string[];
-  /** A set per set not archived. */
+  /** A set per set on the radar: not archived, and with a skill. */
   entries: EditionEntry[];
   retired: RetiredEntry[];
 }
@@ -66,10 +71,10 @@ export function publishedRing(id: string, editions: readonly ComparedEdition[]):
   return lastEdition(editions)?.entries.find((entry) => entry.id === id)?.ring;
 }
 
-/** The sets, not archived, that moved since the last edition and have no explanation yet; in their order. */
+/** The sets on the radar (not archived, with a skill) that moved since the last edition and have no explanation yet; in their order. */
 export function missingReasons(sets: readonly SkillSet[], editions: readonly ComparedEdition[]): SkillSet[] {
   const changes = changesSince(sets, editions);
-  return sets.filter((set) => !set.archived && changes.get(set.id)?.kind === "moved" && !set.moveReason?.trim());
+  return sets.filter((set) => isOnRadar(set) && changes.get(set.id)?.kind === "moved" && !set.moveReason?.trim());
 }
 
 /**
@@ -94,7 +99,7 @@ export function publishEdition(
   for (const set of sets) {
     const change = changes.get(set.id);
     if (change?.kind === "retired") retired.push({ id: set.id, name: set.name, previousRing: change.previousRing });
-    if (set.archived || !change || change.kind === "retired") continue;
+    if (!isOnRadar(set) || !change || change.kind === "retired") continue;
     entries.push(entryOf(set, change));
   }
   const edition: Edition = {
@@ -129,7 +134,6 @@ function entryOf(set: SkillSet, change: Change): EditionEntry {
     name: set.name,
     ...(set.sourceUrl ? { sourceUrl: set.sourceUrl } : {}),
     description: set.description,
-    quadrant: set.quadrant,
     ring: set.ring,
     notes: set.notes,
     skills: set.skills.map(frozenSkill),
@@ -147,6 +151,7 @@ const frozenSkill = (skill: SkillSet["skills"][number]): EditionSkill => ({
   description: skill.description,
   ...(skill.score !== undefined ? { score: skill.score } : {}),
   notes: skill.notes,
+  topic: skill.topic,
 });
 
 /** What the index keeps of an edition: its number, its date and how many skills it published in each ring. */
@@ -206,18 +211,19 @@ function readEntry(stored: unknown): EditionEntry | null {
   const skillChanges = readSkillChanges(value.skillChanges);
   // The old form (an entry was one skill) has no list of skills: it becomes a set of one skill with the id the migrated Library gives.
   const old = !Array.isArray(value.skills);
+  // An entry published before the topic went to the skills has its quadrant: each of its skills takes it as its topic.
+  const topic = integerBetween(value.quadrant, 0, 4) ?? 0;
   const description = text(value.description) ?? "";
   return {
     id,
     name,
     ...(sourceUrl ? { sourceUrl } : {}),
     description,
-    quadrant: integerBetween(value.quadrant, 0, 4) ?? 0,
     ring: RINGS.find((ring) => ring === value.ring) ?? "watch",
     notes: old ? "" : (text(value.notes) ?? ""),
     skills: old
-      ? [{ id: legacySkillId(id), name, ...(sourceUrl ? { sourceUrl } : {}), description, score: integerBetween(value.score, 1, 5) ?? 3, notes: text(value.notes) ?? "" }]
-      : readAll(value.skills, readSkill),
+      ? [{ id: legacySkillId(id), name, ...(sourceUrl ? { sourceUrl } : {}), description, score: integerBetween(value.score, 1, 5) ?? 3, notes: text(value.notes) ?? "", topic }]
+      : readAll(value.skills, (item) => readSkill(item, topic)),
     change: CHANGES.find((change) => change === value.change) ?? "unchanged",
     ...(previousRing ? { previousRing } : {}),
     ...(moveReason ? { moveReason } : {}),
@@ -225,7 +231,7 @@ function readEntry(stored: unknown): EditionEntry | null {
   };
 }
 
-function readSkill(stored: unknown): EditionSkill | null {
+function readSkill(stored: unknown, fallbackTopic: number): EditionSkill | null {
   const value = record(stored);
   const id = text(value.id);
   const name = text(value.name);
@@ -239,6 +245,7 @@ function readSkill(stored: unknown): EditionSkill | null {
     description: text(value.description) ?? "",
     ...(score !== undefined ? { score } : {}),
     notes: text(value.notes) ?? "",
+    topic: integerBetween(value.topic, 0, 4) ?? fallbackTopic,
   };
 }
 

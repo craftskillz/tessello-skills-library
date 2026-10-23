@@ -5,7 +5,7 @@
   import { parseSkillUrl } from "../lib/github.ts";
   import { publishedRing, REASON_MAX } from "../lib/editions.ts";
   import { canDelete, DESCRIPTION_MAX, NAME_MAX, RINGS, type Skill, type SetEdit } from "../lib/skills.ts";
-  import { addSkill, editions, editSet, refreshSet, remove, removeSkill, sets, settings } from "../lib/store.svelte.ts";
+  import { addSkill, editions, editSet, refreshSet, remove, removeSkill, sets } from "../lib/store.svelte.ts";
   import Modal from "./Modal.svelte";
   import { failureMessage } from "./github-failure.ts";
   import SkillSection from "./SkillSection.svelte";
@@ -192,14 +192,6 @@
         {t("description")}
         <textarea rows="3" maxlength={DESCRIPTION_MAX} bind:value={description} oninput={() => save({ description })}></textarea>
       </label>
-      <label>
-        {t("topic")}
-        <select value={String(set.quadrant)} onchange={(event) => save({ quadrant: Number(event.currentTarget.value) })}>
-          {#each settings.topics as topic, index (index)}
-            <option value={String(index)}>{topic}</option>
-          {/each}
-        </select>
-      </label>
       <fieldset class="sl-choice">
         <legend>{t("ring")}</legend>
         {#each RINGS as ring (ring)}
@@ -343,8 +335,7 @@
     font-size: 13px;
   }
   .sl-panel-body input[type="text"],
-  .sl-panel-body textarea,
-  .sl-panel-body select {
+  .sl-panel-body textarea {
     padding: 8px 10px;
     border-radius: 8px;
     border: 1px solid var(--line);
@@ -353,8 +344,7 @@
     font: inherit;
   }
   .sl-panel-body input:focus,
-  .sl-panel-body textarea:focus,
-  .sl-panel-body select:focus {
+  .sl-panel-body textarea:focus {
     outline: 2px solid var(--accent);
     outline-offset: -1px;
   }

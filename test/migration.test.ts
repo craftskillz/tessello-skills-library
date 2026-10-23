@@ -56,14 +56,13 @@ describe("migrating the old library to sets", () => {
     assert.deepEqual(sets.map((set) => set.skills.length), [1, 1]);
   });
 
-  test("the set takes what placed the old skill on the radar, and has no notes", () => {
+  test("the set takes what placed the old skill on the radar, except its quadrant, and has no notes", () => {
     const [set] = migrateLegacySkills([old]);
     assert.deepEqual({ ...set, skills: [] }, {
       id: "a",
       name: "TDD",
       sourceUrl: "https://example.com/tdd",
       description: "red, green",
-      quadrant: 2,
       ring: "recommended",
       notes: "",
       skills: [],
@@ -77,7 +76,7 @@ describe("migrating the old library to sets", () => {
   test("its only skill takes the score and the notes, and gets the id legacySkillId(set id)", () => {
     const [set] = migrateLegacySkills([old]);
     assert.deepEqual(set.skills, [
-      { id: legacySkillId("a"), name: "TDD", sourceUrl: "https://example.com/tdd", description: "red, green", score: 5, notes: "my notes", addedAt: "2026-10-01T00:00:00.000Z" },
+      { id: legacySkillId("a"), name: "TDD", sourceUrl: "https://example.com/tdd", description: "red, green", score: 5, notes: "my notes", addedAt: "2026-10-01T00:00:00.000Z", topic: 2 },
     ]);
   });
 

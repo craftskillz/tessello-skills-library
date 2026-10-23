@@ -3,7 +3,7 @@
   import { changesSince } from "../lib/changes.ts";
   import { type DiscoveredSkill, discoverSkills, parseSkillUrl, skillsOf } from "../lib/github.ts";
   import { t, type MessageKey } from "../lib/i18n.ts";
-  import { type Filters, filterSets, findDuplicate, linkOf, newestFirst, type Ring, RINGS, type SkillSet, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX, TOPIC_NAME_MAX } from "../lib/skills.ts";
+  import { type Filters, filterSets, findDuplicate, linkOf, newestFirst, type Ring, RINGS, type SkillSet, type Tab, TABS, DESCRIPTION_MAX, NAME_MAX, TOPIC_NAME_MAX, setTopics } from "../lib/skills.ts";
   import { addSet, editions, importSet, load, renameTopic, setFilters, setTab, sets, settings, status } from "../lib/store.svelte.ts";
   import { changeTag, skillCountLabel } from "./change-tag.ts";
   import EditionsTab from "./EditionsTab.svelte";
@@ -97,7 +97,7 @@
   }
 
   /** The skills found under a URL, waiting for the User to choose which to import and to name the set. */
-  let preview = $state<{ url: string; skills: DiscoveredSkill[]; checked: boolean[]; name: string } | null>(null);
+  let preview = $state<{ url: string; skills: DiscoveredSkill[]; checked: boolean[]; name: string; topic: number } | null>(null);
   const importable = $derived(preview !== null && preview.name.trim() !== "" && preview.checked.some(Boolean));
 
   /** Looks for the skills at the URL and previews them, unless the set is there already; what cannot be read leaves the User to add it by hand. */
@@ -124,7 +124,7 @@
     } else {
       const skills = skillsOf(found);
       notice = { text: "" };
-      preview = { url: parsed.sourceUrl, skills, checked: skills.map(() => true), name: (found.kind === "set" ? parsed.repo : found.skill.name).slice(0, NAME_MAX) };
+      preview = { url: parsed.sourceUrl, skills, checked: skills.map(() => true), name: (found.kind === "set" ? parsed.repo : found.skill.name).slice(0, NAME_MAX), topic: 0 };
     }
   }
 
@@ -132,7 +132,7 @@
     event.preventDefault();
     if (!preview || !importable) return;
     const chosen = preview.skills.filter((_, index) => preview!.checked[index]);
-    const outcome = importSet({ name: preview.name, url: preview.url }, chosen);
+    const outcome = importSet({ name: preview.name, url: preview.url, topic: preview.topic }, chosen);
     preview = null;
     if (!outcome) return;
     if ("duplicate" in outcome) {
@@ -308,7 +308,7 @@
                 <button type="button" class="sl-btn" aria-label={t("edit_set", { name: set.name })} onclick={() => (editing = set.id)}>✎</button>
                 <span class="sl-ring sl-ring--{set.ring}">{t(`ring_${set.ring}` as MessageKey)}</span>
                 <span class="sl-count">{skillCountLabel(set)}</span>
-                <span class="sl-topic">{settings.topics[set.quadrant]}</span>
+                <span class="sl-topic">{set.skills.length ? setTopics(set).map((index) => settings.topics[index]).join(", ") : t("no_skill_off_radar")}</span>
                 {#if tag}<span class="sl-tag">{tag}</span>{/if}
                 {#if set.archived}<span class="sl-tag">{t("archived_tag")}</span>{/if}
               </li>
@@ -363,6 +363,14 @@
         <label>
           {t("set_name")}
           <input type="text" required maxlength={NAME_MAX} autocomplete="off" bind:value={preview.name} />
+        </label>
+        <label>
+          {t("topic")}
+          <select bind:value={preview.topic}>
+            {#each settings.topics as topic, index (index)}
+              <option value={index}>{topic}</option>
+            {/each}
+          </select>
         </label>
         <fieldset class="sl-found">
           <legend>{t("import_found")}</legend>

@@ -4,7 +4,7 @@
   import { missingReasons, nextNumber as numberAfter } from "../lib/editions.ts";
   import { type MessageKey, t } from "../lib/i18n.ts";
   import { numberEntries, type RadarEntry, renderRadar } from "../lib/radar.ts";
-  import { RINGS, type Ring, type SkillSet } from "../lib/skills.ts";
+  import { RINGS, type Ring, type SkillSet, setTopics } from "../lib/skills.ts";
   import { editions, publish, sets, settings } from "../lib/store.svelte.ts";
   import { changeTag, ringName } from "./change-tag.ts";
   import Modal from "./Modal.svelte";
@@ -20,10 +20,12 @@
       .map((set): RadarEntry => {
         const change = changes.get(set.id) ?? { kind: "unchanged" };
         const kind = change.kind === "retired" ? "unchanged" : change.kind;
-        return { id: set.id, name: set.name, quadrant: set.quadrant, ring: set.ring, change: kind, previousRing: "previousRing" in change ? change.previousRing : undefined, skills: set.skills };
+        return { id: set.id, name: set.name, ring: set.ring, change: kind, previousRing: "previousRing" in change ? change.previousRing : undefined, skills: set.skills };
       }),
   );
   const numbered = $derived(numberEntries(entries));
+  /** The first topic of each numbered set, under which its one line of the legend is listed. */
+  const firstTopic = $derived(new Map(sets.list.map((set) => [set.id, setTopics(set)[0]])));
 
   const svg = $derived(
     renderRadar(entries, settings.topics, {
@@ -90,7 +92,7 @@
       <RadarDrawing {svg} {onOpen} />
       <nav class="sl-legend" aria-label={t("radar_legend")}>
         {#each settings.topics as topic, index (index)}
-          {@const group = numbered.filter((entry) => entry.quadrant === index)}
+          {@const group = numbered.filter((entry) => firstTopic.get(entry.id) === index)}
           {#if group.length}
             <h3 class="sl-legend-heading">{topic}</h3>
             <ul class="sl-legend-list">

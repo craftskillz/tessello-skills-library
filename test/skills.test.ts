@@ -5,6 +5,7 @@ import {
   addSkillToSet,
   addUnlessDuplicate,
   canDelete,
+  defaultTopic,
   deleteSet,
   editSet,
   editSkillInSet,
@@ -23,6 +24,7 @@ import {
   refreshSet,
   removeSkillFromSet,
   renameTopic,
+  setTopics,
   type Skill,
   type SkillSet,
 } from "../src/lib/skills.ts";
@@ -31,7 +33,6 @@ const set = (id: string, addedAt: string, rest: Partial<SkillSet> = {}): SkillSe
   id,
   name: `Set ${id}`,
   description: "",
-  quadrant: 0,
   ring: "watch",
   notes: "",
   skills: [],
@@ -41,12 +42,12 @@ const set = (id: string, addedAt: string, rest: Partial<SkillSet> = {}): SkillSe
   ...rest,
 });
 
-const skillOf = (id: string, rest: Partial<Skill> = {}): Skill => ({ id, name: `Skill ${id}`, description: "", notes: "", addedAt: "2026-10-01T00:00:00.000Z", ...rest });
+const skillOf = (id: string, rest: Partial<Skill> = {}): Skill => ({ id, name: `Skill ${id}`, description: "", notes: "", addedAt: "2026-10-01T00:00:00.000Z", topic: 0, ...rest });
 
 describe("adding a set by hand", () => {
   const now = new Date("2026-10-22T10:00:00Z");
 
-  test("a new set is to watch, in the first quadrant, with no notes and no set", () => {
+  test("a new set is to watch, with no notes, no skill and no topic of its own", () => {
     const result = addSet([], { name: "  TDD  ", description: " red, green " , url: " https://example.com/tdd "}, now, "id-1");
     assert.deepEqual(result?.sets, [
       {
@@ -54,7 +55,6 @@ describe("adding a set by hand", () => {
         name: "TDD",
         sourceUrl: "https://example.com/tdd",
         description: "red, green",
-        quadrant: 0,
         ring: "watch",
         notes: "",
         skills: [],
@@ -111,10 +111,9 @@ describe("reading the sets the storage holds", () => {
     const full = set("a", "2026-10-01T00:00:00.000Z", {
       sourceUrl: "https://example.com",
       description: "d",
-      quadrant: 2,
       ring: "recommended",
       notes: "n",
-      skills: [skillOf("s1", { score: 4, notes: "sn", sourceUrl: "https://example.com/s", description: "sd", goneUpstream: true })],
+      skills: [skillOf("s1", { topic: 3, score: 4, notes: "sn", sourceUrl: "https://example.com/s", description: "sd", goneUpstream: true })],
       updatedAt: "2026-10-02T00:00:00.000Z",
       archived: true,
       moveReason: "proved itself",
@@ -130,13 +129,8 @@ describe("reading the sets the storage holds", () => {
   });
 
   test("a value out of range or of the wrong kind takes its default", () => {
-    const [read] = readSets([{ id: "a", name: "A", ring: "adopt", quadrant: 5, addedAt: "never", updatedAt: 3, archived: "yes", notes: 1, description: null }]);
+    const [read] = readSets([{ id: "a", name: "A", ring: "adopt", addedAt: "never", updatedAt: 3, archived: "yes", notes: 1, description: null }]);
     assert.deepEqual(read, set("a", new Date(0).toISOString(), { name: "A" }));
-    assert.equal(readSets([{ id: "a", name: "A", score: 2.5, quadrant: -1 }])[0].quadrant, 0);
-  });
-
-  test("a set in the fifth topic is read as such", () => {
-    assert.equal(readSets([{ id: "a", name: "A", quadrant: 4 }])[0].quadrant, 4);
   });
 });
 
@@ -224,13 +218,10 @@ describe("editing a set", () => {
     assert.equal(editSet(list, "a", {}, now) && (editSet(list, "a", {}, now) as { set: SkillSet }).set, list[0]);
   });
 
-  test("a topic or a ring that does not exist is ignored", () => {
-    const result = editSet(list, "a", { quadrant: 5, ring: "adopt" as never }, now);
+  test("a ring that does not exist is ignored", () => {
+    const result = editSet(list, "a", { ring: "adopt" as never }, now);
     assert.ok(result && "set" in result);
     assert.equal(result.set, list[0]);
-    assert.equal((editSet(list, "a", { quadrant: -1 }, now) as { set: SkillSet }).set, list[0]);
-    assert.equal((editSet(list, "a", { quadrant: 3 }, now) as { set: SkillSet }).set.quadrant, 3);
-    assert.equal((editSet(list, "a", { quadrant: 4 }, now) as { set: SkillSet }).set.quadrant, 4);
   });
 
   test("the name, the description and the notes are kept as typed, only clipped", () => {
@@ -305,10 +296,10 @@ describe("reading the filters", () => {
 describe("filtering the library", () => {
   const at = "2026-10-01T00:00:00.000Z";
   const list = [
-    set("a", at, { name: "Écrire un ADR", ring: "try", quadrant: 2 }),
-    set("b", at, { name: "tdd-loop", ring: "recommended", quadrant: 1 }),
-    set("c", at, { name: "Plan", ring: "try", quadrant: 0 }),
-    set("d", at, { name: "Old plan", ring: "try", quadrant: 0, archived: true }),
+    set("a", at, { name: "Écrire un ADR", ring: "try", skills: [skillOf("sa", { topic: 2 })] }),
+    set("b", at, { name: "tdd-loop", ring: "recommended", skills: [skillOf("sb", { topic: 1 })] }),
+    set("c", at, { name: "Plan", ring: "try", skills: [skillOf("sc", { topic: 0 })] }),
+    set("d", at, { name: "Old plan", ring: "try", archived: true, skills: [skillOf("sd", { topic: 0 })] }),
   ];
   const by = (filters: Partial<Parameters<typeof filterSets>[1]>) =>
     filterSets(list, { rings: [], topics: [], query: "", archived: false, ...filters }).map((item) => item.id);
@@ -334,8 +325,17 @@ describe("filtering the library", () => {
   });
 
   test("the fifth topic keeps its sets", () => {
-    const fifth = [...list, set("e", at, { name: "Learn", quadrant: 4 })];
+    const fifth = [...list, set("e", at, { name: "Learn", skills: [skillOf("se", { topic: 4 })] })];
     assert.deepEqual(filterSets(fifth, { rings: [], topics: [4], query: "", archived: false }).map((item) => item.id), ["e"]);
+  });
+
+  test("a set with skills in several topics is kept by any of them, and one with no skill by none", () => {
+    const mixed = [set("m", at, { skills: [skillOf("m1", { topic: 1 }), skillOf("m2", { topic: 3 })] }), set("n", at)];
+    const keep = (topics: number[]) => filterSets(mixed, { rings: [], topics, query: "", archived: false }).map((item) => item.id);
+    assert.deepEqual(keep([3]), ["m"]);
+    assert.deepEqual(keep([1, 4]), ["m"]);
+    assert.deepEqual(keep([0, 2, 4]), []);
+    assert.deepEqual(keep([]), ["m", "n"]);
   });
 
   test("the rings and the topics together keep the sets that match both", () => {
@@ -472,6 +472,7 @@ describe("adding a skill to a set", () => {
       description: "why",
       notes: NOTES_TEMPLATE,
       addedAt: "2026-10-22T10:00:00.000Z",
+      topic: 0,
     });
     assert.deepEqual(result.set.skills.map((item) => item.id), ["s1", "s2"]);
     assert.equal(result.set.skills[0], first);
@@ -640,7 +641,6 @@ const setFrom = (id: string, sourceUrl?: string, rest: Partial<SkillSet> = {}): 
   name: `Set ${id}`,
   ...(sourceUrl ? { sourceUrl } : {}),
   description: "",
-  quadrant: 0,
   ring: "watch",
   notes: "",
   skills: [],
@@ -735,7 +735,7 @@ describe("importing a set of the skills found", () => {
     return () => `id-${++next}`;
   };
 
-  test("adds a set to watch, in the first quadrant, with the skills in their order, not evaluated, with the template as notes", () => {
+  test("adds a set to watch, with the skills in their order, not evaluated, with the template as notes", () => {
     const result = importSet([], draft, found, now, ids());
     assert.ok(result && "set" in result);
     const { set, sets } = result;
@@ -743,7 +743,7 @@ describe("importing a set of the skills found", () => {
     assert.equal(set.id, "id-1");
     assert.equal(set.name, "Superpowers");
     assert.equal(set.sourceUrl, draft.url);
-    assert.deepEqual([set.ring, set.quadrant, set.notes, set.description, set.archived], ["watch", 0, "", "", false]);
+    assert.deepEqual([set.ring, set.notes, set.description, set.archived], ["watch", "", "", false]);
     assert.deepEqual(
       set.skills.map(({ id, name, description, sourceUrl, notes, addedAt, score }) => ({ id, name, description, sourceUrl, notes, addedAt, score })),
       found.map((skill, index) => ({ id: `id-${index + 2}`, ...skill, notes: NOTES_TEMPLATE, addedAt: now.toISOString(), score: undefined })),
@@ -844,8 +844,8 @@ describe("refreshing a set with the skills found again", () => {
       ...set,
       skills: [
         ...set.skills,
-        { id: "hand", name: "By hand", description: "", notes: "", addedAt: imported.toISOString() },
-        { id: "far", name: "Elsewhere", sourceUrl: "https://github.com/other/repo/tree/main/x", description: "", notes: "", addedAt: imported.toISOString() },
+        { id: "hand", name: "By hand", description: "", notes: "", addedAt: imported.toISOString(), topic: 0 },
+        { id: "far", name: "Elsewhere", sourceUrl: "https://github.com/other/repo/tree/main/x", description: "", notes: "", addedAt: imported.toISOString(), topic: 0 },
       ],
     };
     const result = refreshSet([withHand], set.id, found("tdd"), now, ids())!;
@@ -879,5 +879,125 @@ describe("refreshing a set with the skills found again", () => {
 
   test("no such set is null", () => {
     assert.equal(refreshSet([], "nope", [], now, ids()), null);
+  });
+});
+
+describe("the topics of a set", () => {
+  const withTopics = (...topics: number[]) => ({ skills: topics.map((topic) => ({ topic })) });
+
+  test("a set covers the topics of its skills, once each, in increasing order", () => {
+    assert.deepEqual(setTopics(withTopics(3, 1, 3, 0)), [0, 1, 3]);
+    assert.deepEqual(setTopics(withTopics()), []);
+  });
+
+  test("the default topic is the most frequent one", () => {
+    assert.equal(defaultTopic(withTopics(2, 1, 2, 4)), 2);
+  });
+
+  test("on a tie the default topic is the smallest index", () => {
+    assert.equal(defaultTopic(withTopics(3, 1, 3, 1, 4)), 1);
+  });
+
+  test("a set with no skill has 0 as default topic", () => {
+    assert.equal(defaultTopic(withTopics()), 0);
+  });
+});
+
+describe("the topic of a skill read from the storage", () => {
+  const readSkills = (value: unknown) => readSets([value])[0].skills;
+  const stored = (extra: object, skills: object[]) => ({ id: "a", name: "A", ...extra, skills });
+
+  test("a skill keeps its topic when it is an integer from 0 to 4, and else takes 0", () => {
+    const skills = readSkills(stored({}, [{ id: "s1", name: "S1", topic: 4 }, { id: "s2", name: "S2", topic: 5 }, { id: "s3", name: "S3", topic: "1" }, { id: "s4", name: "S4" }]));
+    assert.deepEqual(skills.map((skill) => skill.topic), [4, 0, 0, 0]);
+  });
+
+  test("a set that still has a quadrant gives it as topic to each skill that has none, and loses it", () => {
+    const [read] = readSets([stored({ quadrant: 3 }, [{ id: "s1", name: "S1" }, { id: "s2", name: "S2" }])]);
+    assert.deepEqual(read.skills.map((skill) => skill.topic), [3, 3]);
+    assert.equal("quadrant" in read, false);
+  });
+
+  test("a skill that already has a topic is not touched by the quadrant of its set", () => {
+    const skills = readSkills(stored({ quadrant: 3 }, [{ id: "s1", name: "S1", topic: 1 }, { id: "s2", name: "S2" }]));
+    assert.deepEqual(skills.map((skill) => skill.topic), [1, 3]);
+  });
+
+  test("a quadrant out of range gives nothing", () => {
+    assert.equal(readSkills(stored({ quadrant: 9 }, [{ id: "s1", name: "S1" }]))[0].topic, 0);
+  });
+});
+
+describe("the topic of the skills added to a set", () => {
+  const now = new Date("2026-10-22T10:00:00Z");
+  const target = set("a", "2026-10-01T00:00:00.000Z", { skills: [skillOf("s1", { topic: 2 }), skillOf("s2", { topic: 2 }), skillOf("s3", { topic: 1 })] });
+
+  test("a skill added by hand takes the topic of the draft when it is valid", () => {
+    const result = addSkillToSet([target], "a", { name: "X", topic: 4 }, now, "s4");
+    assert.ok(result && "skill" in result);
+    assert.equal(result.skill.topic, 4);
+    const first = addSkillToSet([target], "a", { name: "X", topic: 0 }, now, "s4");
+    assert.ok(first && "skill" in first);
+    assert.equal(first.skill.topic, 0);
+  });
+
+  test("without a valid topic in the draft it takes the default topic of the set", () => {
+    for (const topic of [undefined, 5, -1, 1.5]) {
+      const result = addSkillToSet([target], "a", { name: "X", ...(topic === undefined ? {} : { topic }) }, now, "s4");
+      assert.ok(result && "skill" in result);
+      assert.equal(result.skill.topic, 2);
+    }
+  });
+
+  test("the first skill of an empty set takes topic 0", () => {
+    const result = addSkillToSet([set("e", "2026-10-01T00:00:00.000Z")], "e", { name: "X" }, now, "s1");
+    assert.ok(result && "skill" in result);
+    assert.equal(result.skill.topic, 0);
+  });
+
+  test("an imported set gives its topic to every skill", () => {
+    const found = [
+      { name: "a", description: "", sourceUrl: "https://github.com/o/r/tree/main/a" },
+      { name: "b", description: "", sourceUrl: "https://github.com/o/r/tree/main/b" },
+    ];
+    let next = 0;
+    const result = importSet([], { name: "Set", url: "https://github.com/o/r/tree/main", topic: 3 }, found, now, () => `i${++next}`);
+    assert.ok(result && "set" in result);
+    assert.deepEqual(result.set.skills.map((skill) => skill.topic), [3, 3]);
+    next = 0;
+    const invalid = importSet([], { name: "Set", url: "https://github.com/o/r/tree/main", topic: 7 }, found, now, () => `i${++next}`);
+    assert.ok(invalid && "set" in invalid);
+    assert.deepEqual(invalid.set.skills.map((skill) => skill.topic), [0, 0]);
+  });
+
+  test("a refresh gives the skills it adds the default topic of the set, computed before the additions", () => {
+    const base = "https://github.com/o/r/tree/main/s";
+    const kept = set("r", "2026-10-01T00:00:00.000Z", { sourceUrl: base, skills: [skillOf("k1", { topic: 3, sourceUrl: `${base}/k1` }), skillOf("k2", { topic: 3, sourceUrl: `${base}/k2` }), skillOf("k3", { topic: 1, sourceUrl: `${base}/k3` })] });
+    let next = 0;
+    const found = ["k1", "k2", "k3", "n1", "n2", "n3"].map((name) => ({ name, description: "", sourceUrl: `${base}/${name}` }));
+    const result = refreshSet([kept], "r", found, now, () => `n${++next}`);
+    assert.ok(result);
+    assert.deepEqual(result.set.skills.slice(3).map((skill) => skill.topic), [3, 3, 3]);
+  });
+});
+
+describe("changing the topic of a skill", () => {
+  const now = new Date("2026-10-23T09:00:00Z");
+  const target = set("a", "2026-10-01T00:00:00.000Z", { skills: [skillOf("s1", { topic: 1 })] });
+  const edit = (topic: number) => editSkillInSet([target], "a", "s1", { topic }, now) as { sets: SkillSet[]; set: SkillSet; skill: Skill };
+
+  test("a topic from 0 to 4 is saved, and it dates the set", () => {
+    const result = edit(4);
+    assert.equal(result.skill.topic, 4);
+    assert.equal(result.set.updatedAt, now.toISOString());
+    assert.equal(edit(0).skill.topic, 0);
+  });
+
+  test("a topic outside 0 to 4, or the same one, changes nothing", () => {
+    for (const topic of [5, -1, 1.5, 1]) {
+      const result = edit(topic);
+      assert.equal(result.set, target);
+      assert.equal(result.skill, target.skills[0]);
+    }
   });
 });

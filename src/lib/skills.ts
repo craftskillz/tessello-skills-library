@@ -24,9 +24,14 @@ export interface Skill {
   addedAt: string;
   /** Whether the skill is gone from the repo it was imported from. */
   goneUpstream?: boolean;
+  /** The index of its topic, 0 to 4: renaming a topic does not change it. */
+  topic: number;
 }
 
-/** A set ("Ensemble"): what has a ring and a topic, a dot on the radar, and holds an ordered list of skills. */
+/**
+ * A set ("Ensemble"): what has a ring, holds an ordered list of skills, and has a dot on the radar in each topic its skills
+ * are in. A set with no skill is not on the radar.
+ */
 export interface SkillSet {
   /** The key of a set: random, stable, and never two with the same. */
   id: string;
@@ -34,8 +39,6 @@ export interface SkillSet {
   /** Where the set comes from, when the User knows it. */
   sourceUrl?: string;
   description: string;
-  /** The index of its topic, 0 to 4: renaming a topic does not change it. */
-  quadrant: number;
   ring: Ring;
   /** Markdown. */
   notes: string;
@@ -61,11 +64,34 @@ export interface Draft {
   name: string;
   url?: string;
   description?: string;
+  /** The topic of the skill added, 0 to 4; when it is missing or invalid, a skill takes the default topic of its set. */
+  topic?: number;
+}
+
+/** Whether the set is on the radar: not archived, and with at least one skill. */
+export const isOnRadar = (set: Pick<SkillSet, "archived" | "skills">) => !set.archived && set.skills.length > 0;
+
+/** The topics of the skills of a set, once each, in increasing order; none for a set with no skill. */
+export function setTopics(set: { skills: readonly { topic: number }[] }): number[] {
+  return [...new Set(set.skills.map((skill) => skill.topic))].sort((a, b) => a - b);
+}
+
+/** The topic most of the skills of a set are in, the smallest index on a tie; 0 for a set with no skill. */
+export function defaultTopic(set: { skills: readonly { topic: number }[] }): number {
+  const counts = new Map<number, number>();
+  for (const { topic } of set.skills) counts.set(topic, (counts.get(topic) ?? 0) + 1);
+  let best = 0;
+  let bestCount = 0;
+  for (const topic of [...counts.keys()].sort((a, b) => a - b)) {
+    const count = counts.get(topic)!;
+    if (count > bestCount) [best, bestCount] = [topic, count];
+  }
+  return best;
 }
 
 /**
  * Adds a set at the date `now`, with the id `id`, first in the list; null when its name is blank. It is to watch, in the
- * first topic, with no notes and no skill. A blank url is no url. The name and the description are clipped to what the
+ * no notes and no skill (so no topic and not on the radar yet). A blank url is no url. The name and the description are clipped to what the
  * View accepts, since a `SKILL.md` may give longer ones.
  */
 export function addSet(sets: readonly SkillSet[], draft: Draft, now: Date, id: string): { sets: SkillSet[]; set: SkillSet } | null {
@@ -74,7 +100,6 @@ export function addSet(sets: readonly SkillSet[], draft: Draft, now: Date, id: s
   const set: SkillSet = {
     id,
     ...fields,
-    quadrant: 0,
     ring: "watch",
     notes: "",
     skills: [],
@@ -94,7 +119,8 @@ function fieldsOf(draft: Draft): { name: string; sourceUrl?: string; description
 
 /**
  * Adds a skill at the end of the set `setId`, with the id `skillId`, at the date `now`; null when there is no such set or
- * the name is blank. It has no score and the template as its notes. Refused, with the skill that has it, when another
+ * the name is blank. It has no score and the template as its notes; its topic is the one of the draft when that is from 0 to 4,
+ * otherwise the default topic of the set. Refused, with the skill that has it, when another
  * skill of that set comes from the same place as the url of the draft: the skills of the other sets never conflict.
  */
 export function addSkillToSet(
@@ -109,7 +135,8 @@ export function addSkillToSet(
   if (!current || !fields) return null;
   const duplicate = skillWithUrl(current.skills, fields.sourceUrl);
   if (duplicate) return { error: "url_taken", duplicate };
-  const skill: Skill = { id: skillId, ...fields, notes: NOTES_TEMPLATE, addedAt: now.toISOString() };
+  const topic = integerBetween(draft.topic, 0, 4) ?? defaultTopic(current);
+  const skill: Skill = { id: skillId, ...fields, notes: NOTES_TEMPLATE, addedAt: now.toISOString(), topic };
   const set: SkillSet = { ...current, skills: [...current.skills, skill], updatedAt: now.toISOString() };
   return { sets: replace(sets, current, set), set, skill };
 }
@@ -127,12 +154,12 @@ export const NOTES_MAX = 8000;
 export const REASON_MAX = 280;
 
 /** What the User changes in a set; what is not given stays as it is. */
-export type SetEdit = Partial<Pick<SkillSet, "name" | "sourceUrl" | "description" | "quadrant" | "ring" | "notes" | "archived" | "moveReason">>;
+export type SetEdit = Partial<Pick<SkillSet, "name" | "sourceUrl" | "description" | "ring" | "notes" | "archived" | "moveReason">>;
 
 /**
  * Saves a change to the set `id` at the date `now`; null when there is no such set. The name, the description and the
  * notes are kept as typed, since the User is still typing: the name and the description are only clipped, and a blank
- * name or notes that are too long are refused with nothing saved. A blank url removes the url. A topic or a ring that
+ * name or notes that are too long are refused with nothing saved. A blank url removes the url. A ring that
  * does not exist is ignored, and so is an archived that is not a boolean. The reason of a move is kept as typed
  * (a blank one removes it, one that is too long is refused), but only while `publishedRing`, the ring of the set in the
  * last edition, is known and differs from its ring: back in that ring, or in no edition, it has no reason. The date
@@ -154,7 +181,6 @@ export function editSet(
   if (edit.name !== undefined) changes.name = edit.name.slice(0, NAME_MAX);
   if (edit.description !== undefined) changes.description = edit.description.slice(0, DESCRIPTION_MAX);
   if (edit.notes !== undefined) changes.notes = edit.notes;
-  if (edit.quadrant !== undefined && integerBetween(edit.quadrant, 0, 4) !== undefined) changes.quadrant = edit.quadrant;
   if (edit.ring !== undefined && RINGS.includes(edit.ring)) changes.ring = edit.ring;
   if (typeof edit.archived === "boolean") changes.archived = edit.archived;
   const ring = changes.ring ?? current.ring;
@@ -177,12 +203,14 @@ export interface SkillEdit {
   description?: string;
   score?: number | null;
   notes?: string;
+  /** 0 to 4; anything else is ignored. */
+  topic?: number;
 }
 
 /**
  * Saves a change to the skill `skillId` of the set `setId` at the date `now`; null when there is no such set or skill.
  * Like `editSet`, the name, the description and the notes are kept as typed, only clipped, a blank name and notes that are
- * too long are refused, and a blank url removes the url; a score outside 1 to 5 is ignored and null clears it. A url that
+ * too long are refused, and a blank url removes the url; a score outside 1 to 5 and a topic outside 0 to 4 are ignored, and null clears the score. A url that
  * another skill of the set has is refused with that skill; a skill is never a duplicate of itself. The date of the set
  * changes only when a value does, otherwise the same objects come back.
  */
@@ -208,6 +236,7 @@ export function editSkillInSet(
   if (edit.description !== undefined) changes.description = edit.description.slice(0, DESCRIPTION_MAX);
   if (edit.notes !== undefined) changes.notes = edit.notes;
   if (edit.score !== undefined && edit.score !== null && integerBetween(edit.score, 1, 5) !== undefined) changes.score = edit.score;
+  if (edit.topic !== undefined && integerBetween(edit.topic, 0, 4) !== undefined) changes.topic = edit.topic;
   const clearScore = edit.score === null && current.score !== undefined;
   const changed = clearScore || (Object.keys(changes) as (keyof Skill)[]).some((key) => changes[key] !== current[key]);
   const urlChanged = edit.sourceUrl !== undefined && (url || undefined) !== current.sourceUrl;
@@ -255,7 +284,7 @@ function readSet(stored: unknown, skillIds: Set<string>): SkillSet | null {
   const addedAt = date(value.addedAt) ?? new Date(0).toISOString();
   const skills: Skill[] = [];
   for (const item of Array.isArray(value.skills) ? value.skills : []) {
-    const skill = readSkill(item);
+    const skill = readSkill(item, integerBetween(value.quadrant, 0, 4) ?? 0);
     if (skill && !skillIds.has(skill.id)) {
       skillIds.add(skill.id);
       skills.push(skill);
@@ -266,7 +295,6 @@ function readSet(stored: unknown, skillIds: Set<string>): SkillSet | null {
     name,
     ...(sourceUrl ? { sourceUrl } : {}),
     description: text(value.description) ?? "",
-    quadrant: integerBetween(value.quadrant, 0, 4) ?? 0,
     ring: RINGS.find((ring) => ring === value.ring) ?? "watch",
     notes: text(value.notes) ?? "",
     skills,
@@ -277,7 +305,8 @@ function readSet(stored: unknown, skillIds: Set<string>): SkillSet | null {
   };
 }
 
-function readSkill(stored: unknown): Skill | null {
+/** A skill as stored; `fallbackTopic` is the topic a skill with none takes, the old `quadrant` of its set. */
+function readSkill(stored: unknown, fallbackTopic: number): Skill | null {
   const value = record(stored);
   const id = text(value.id);
   const name = text(value.name);
@@ -293,6 +322,7 @@ function readSkill(stored: unknown): Skill | null {
     notes: text(value.notes) ?? "",
     addedAt: date(value.addedAt) ?? new Date(0).toISOString(),
     ...(value.goneUpstream === true ? { goneUpstream: true } : {}),
+    topic: integerBetween(value.topic, 0, 4) ?? fallbackTopic,
   };
 }
 
@@ -358,14 +388,14 @@ export function readFilters(stored: unknown): Filters {
   };
 }
 
-/** The sets that have one of the rings and one of the topics selected, and a name, or a skill with a name, with the query in it, the archived ones only when asked; in their order. */
+/** The sets that have one of the rings selected and a skill in one of the topics selected, and a name, or a skill with a name, with the query in it, the archived ones only when asked; in their order. */
 export function filterSets(sets: readonly SkillSet[], filters: Filters): SkillSet[] {
   const query = plain(filters.query.trim());
   return sets.filter(
     (set) =>
       (filters.archived || !set.archived) &&
       (filters.rings.length === 0 || filters.rings.includes(set.ring)) &&
-      (filters.topics.length === 0 || filters.topics.includes(set.quadrant)) &&
+      (filters.topics.length === 0 || setTopics(set).some((topic) => filters.topics.includes(topic))) &&
       (plain(set.name).includes(query) || set.skills.some((skill) => plain(skill.name).includes(query))),
   );
 }
@@ -464,13 +494,13 @@ export function importSet(
   if (skills.length === 0) return null;
   const added = addUnlessDuplicate(sets, draft, now, newId());
   if (!added || "duplicate" in added) return added;
-  const { sets: withSkills, set } = addFoundSkills(added.sets, added.set, skills, now, newId);
+  const { sets: withSkills, set } = addFoundSkills(added.sets, added.set, skills, now, newId, integerBetween(draft.topic, 0, 4) ?? 0);
   return { sets: withSkills, set };
 }
 
 /**
  * Adds each skill found at the end of `set`, in their order, as `addSkillToSet` does: not evaluated, the template as its
- * notes, its folder as its url. A skill whose url the set has already is left out, and `added` counts the others.
+ * notes, its folder as its url, all in the topic `topic`. A skill whose url the set has already is left out, and `added` counts the others.
  */
 function addFoundSkills(
   sets: SkillSet[],
@@ -478,13 +508,14 @@ function addFoundSkills(
   found: readonly DiscoveredSkill[],
   now: Date,
   newId: () => string,
+  topic: number,
 ): { sets: SkillSet[]; set: SkillSet; added: number } {
   let result = { sets, set };
   let added = 0;
   for (const skill of found) {
     // Not offered to `addSkillToSet` when the set has it, so that no id is spent on it.
     if (skillWithUrl(result.set.skills, skill.sourceUrl)) continue;
-    const withSkill = addSkillToSet(result.sets, set.id, { name: skill.name, url: skill.sourceUrl, description: skill.description }, now, newId());
+    const withSkill = addSkillToSet(result.sets, set.id, { name: skill.name, url: skill.sourceUrl, description: skill.description, topic }, now, newId());
     if (withSkill && !("error" in withSkill)) {
       result = withSkill;
       added++;
@@ -525,5 +556,5 @@ export function refreshSet(
   const marksChanged = skills.some((skill, index) => skill !== current.skills[index]);
   const set = marksChanged ? { ...current, skills, updatedAt: now.toISOString() } : current;
   const marked = marksChanged ? sets.map((item) => (item === current ? set : item)) : (sets as SkillSet[]);
-  return { ...addFoundSkills(marked, set, found, now, newId), gone };
+  return { ...addFoundSkills(marked, set, found, now, newId, defaultTopic(current)), gone };
 }

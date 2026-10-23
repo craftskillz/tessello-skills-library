@@ -9,6 +9,7 @@ const member = (id: string, rest: Partial<Skill> = {}): Skill => ({
   description: "",
   notes: "",
   addedAt: "2026-10-01T00:00:00.000Z",
+  topic: 0,
   ...rest,
 });
 
@@ -16,10 +17,9 @@ const set = (id: string, rest: Partial<SkillSet> = {}): SkillSet => ({
   id,
   name: `Set ${id}`,
   description: "",
-  quadrant: 0,
   ring: "watch",
   notes: "",
-  skills: [],
+  skills: [member("m")],
   addedAt: "2026-10-01T00:00:00.000Z",
   updatedAt: "2026-10-01T00:00:00.000Z",
   archived: false,
@@ -29,7 +29,7 @@ const set = (id: string, rest: Partial<SkillSet> = {}): SkillSet => ({
 /** An edition that published the sets as they are, unless told otherwise. */
 const edition = (number: number, ...entries: Partial<ComparedEdition["entries"][number]>[]): ComparedEdition => ({
   number,
-  entries: entries.map((entry) => ({ id: "a", ring: "watch", notes: "", skills: [], ...entry })),
+  entries: entries.map((entry) => ({ id: "a", ring: "watch", notes: "", skills: [{ id: "m", name: "Skill m", notes: "" }], ...entry })),
 });
 
 const noSkillChanges = { added: [], removed: [], scores: [] };
@@ -91,8 +91,8 @@ describe("the changes since the last edition", () => {
     assert.deepEqual(changesSince([set("b", { archived: true })], editions).get("b"), { kind: "unchanged" });
   });
 
-  test("a change of quadrant or of name is no change", () => {
-    const renamed = set("a", { quadrant: 2, name: "Another name", description: "d", sourceUrl: "https://x.test" });
+  test("a change of name or description is no change", () => {
+    const renamed = set("a", { name: "Another name", description: "d", sourceUrl: "https://x.test" });
     assert.deepEqual(changesSince([renamed], [edition(1, { id: "a" })]).get("a"), { kind: "unchanged" });
   });
 
@@ -107,6 +107,34 @@ describe("the changes since the last edition", () => {
   });
 });
 
+describe("a set with no skill", () => {
+  const empty = (rest: Partial<SkillSet> = {}) => set("a", { skills: [], ...rest });
+
+  test("it is retired when the last edition had it", () => {
+    assert.deepEqual(changesSince([empty()], [edition(1, { id: "a", ring: "try" })]).get("a"), { kind: "retired", previousRing: "try" });
+  });
+
+  test("it is back when it finds a skill again and an older edition had it", () => {
+    const editions = [edition(1, { id: "a" }), edition(2, { id: "b" })];
+    assert.deepEqual(changesSince([set("a")], editions).get("a"), { kind: "back" });
+    assert.deepEqual(changesSince([empty()], editions).get("a"), { kind: "unchanged" });
+  });
+
+  test("it is unchanged, not new, while it is empty and was never published", () => {
+    assert.deepEqual(changesSince([empty()], []).get("a"), { kind: "unchanged" });
+    assert.deepEqual(changesSince([empty()], [edition(1, { id: "b" })]).get("a"), { kind: "unchanged" });
+  });
+
+  test("it is new once it gets its first skill", () => {
+    assert.deepEqual(changesSince([set("a")], []).get("a"), { kind: "new" });
+  });
+
+  test("a retired empty set waits to be published, an unpublished empty one does not", () => {
+    const editions = [edition(1, { id: "a" })];
+    assert.equal(pendingCount(changesSince([empty(), empty({ id: "b" })], editions)), 1);
+  });
+});
+
 describe("the changes of the skills of a set", () => {
   const published = (...skills: Partial<ComparedEdition["entries"][number]["skills"][number]>[]) => [
     edition(1, { id: "a", skills: skills.map((skill) => ({ id: "s1", name: "Skill s1", notes: "", ...skill })) }),
@@ -118,7 +146,7 @@ describe("the changes of the skills of a set", () => {
   });
 
   test("a skill removed from the set makes it updated, naming the skill as it was published", () => {
-    const changes = changesSince([set("a", { skills: [] })], published({ name: "Old name" }));
+    const changes = changesSince([set("a", { skills: [member("s2")] })], published({ name: "Old name" }, { id: "s2" }));
     assert.deepEqual(changes.get("a"), { kind: "updated", skills: { ...noSkillChanges, removed: [{ id: "s1", name: "Old name" }] } });
   });
 
@@ -140,6 +168,10 @@ describe("the changes of the skills of a set", () => {
   test("a skill with other notes makes the set updated, with nothing to detail", () => {
     const changes = changesSince([set("a", { skills: [member("s1", { notes: "more" })] })], published({}));
     assert.deepEqual(changes.get("a"), { kind: "updated", skills: noSkillChanges });
+  });
+
+  test("a skill that changes topic is no change", () => {
+    assert.deepEqual(changesSince([set("a", { skills: [member("s1", { topic: 3 })] })], published({})).get("a"), { kind: "unchanged" });
   });
 
   test("a skill renamed, redescribed, re-linked or gone upstream is no change", () => {

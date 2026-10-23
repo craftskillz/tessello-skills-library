@@ -4,17 +4,16 @@ import matter from "gray-matter";
 import { POST_RADAR_LABELS, postSlug, renderPost } from "../src/lib/post.ts";
 import { readEdition, type Edition, type EditionEntry, type EditionSkill } from "../src/lib/editions.ts";
 
-const skill = (id: string, rest: Partial<EditionSkill> = {}): EditionSkill => ({ id, name: `Skill ${id}`, description: "", notes: "", ...rest });
+const skill = (id: string, rest: Partial<EditionSkill> = {}): EditionSkill => ({ id, name: `Skill ${id}`, description: "", topic: 0, notes: "", ...rest });
 
 const entry = (id: string, rest: Partial<EditionEntry> = {}): EditionEntry => ({
   id,
   name: `Set ${id}`,
-  quadrant: 0,
   ring: "watch",
   change: "new",
   description: "",
   notes: "",
-  skills: [],
+  skills: [skill(`${id}-s`)],
   ...rest,
 });
 
@@ -98,7 +97,7 @@ describe("the radar", () => {
 
   test("does not break the legend with the characters of a name", () => {
     const body = bodyOf(edition({}, entry("a", { name: "<b>[x]</b> *y*" })));
-    assert.ok(body.includes("1. &lt;b&gt;\\[x\\]&lt;/b&gt; \\*y\\* — À surveiller (0 skills)"));
+    assert.ok(body.includes("1. &lt;b&gt;\\[x\\]&lt;/b&gt; \\*y\\* — À surveiller (1 skill)"));
   });
 });
 
@@ -131,7 +130,7 @@ describe("what moves", () => {
   });
 
   test("leaves the table out when the set has no skills", () => {
-    assert.ok(!bodyOf(edition({}, entry("a"))).includes("| Skill |"));
+    assert.ok(!bodyOf(edition({}, entry("a", { skills: [] }))).includes("| Skill |"));
   });
 
   test("gives each skill with notes its own part under the table, with the headings of its notes lowered to #####, but not those of a code fence", () => {

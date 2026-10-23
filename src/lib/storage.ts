@@ -1,11 +1,11 @@
-// The sets in the Host storage (CONVENTION.md §6.1): the whole list under `sets` (the old `skills` are migrated once, never touched), and the settings of the View under
+// The sets in the Host storage (CONVENTION.md §6.1): the whole list under `sets` (the old `skills` are migrated once, never touched; so is a `quadrant` of a set, which goes to its skills), and the settings of the View under
 // `settings`. What is stored is read defensively (skills.ts), and a failed write comes back as a message for the User.
 
 import type { Json, Storage } from "@tessello/sdk";
 import { readEdition, readEditionIndex, type Edition, type EditionSummary } from "./editions.ts";
 import { t } from "./i18n.ts";
 import { migrateLegacySkills } from "./migration.ts";
-import { readSets, readSettings, type Settings, type SkillSet } from "./skills.ts";
+import { readSets, readSettings, record, type Settings, type SkillSet } from "./skills.ts";
 
 const SETS = "sets";
 const LEGACY_SKILLS = "skills";
@@ -16,7 +16,8 @@ const editionKey = (number: number) => `edition:${number}`;
 export interface SkillStorage {
   /**
    * The sets. When `sets` was never written and the old `skills` hold a list, migrates it, writes `sets` and returns it
-   * (`skills` is left alone, and ignored from then on). Throws when the Host cannot read them.
+   * (`skills` is left alone, and ignored from then on). When a stored set still has a `quadrant`, it is given to its skills as
+   * their topic and the converted sets are written back, once. Throws when the Host cannot read them.
    */
   read(): Promise<SkillSet[]>;
   /** Writes the sets. Throws an `Error` whose message tells the User what happened. */
@@ -38,7 +39,12 @@ export function skillStorage(storage: Storage): SkillStorage {
   return {
     read: async () => {
       const stored = await storage.get(SETS);
-      if (stored !== null) return readSets(stored);
+      if (stored !== null) {
+        const sets = readSets(stored);
+        // The quadrant went from the set to its skills: the converted list is written once, then no set has a quadrant.
+        if (Array.isArray(stored) && stored.some((item) => "quadrant" in record(item))) await set(storage, SETS, sets as unknown as Exclude<Json, null>);
+        return sets;
+      }
       const legacy = await storage.get(LEGACY_SKILLS);
       if (!Array.isArray(legacy)) return [];
       const migrated = migrateLegacySkills(legacy);

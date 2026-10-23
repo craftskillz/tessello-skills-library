@@ -4,14 +4,15 @@ import type { Edition } from "../src/lib/editions.ts";
 import type { SkillSet } from "../src/lib/skills.ts";
 import { widgetSummary } from "../src/lib/widget.ts";
 
+const member = { id: "m", name: "Skill m", description: "", notes: "", addedAt: "2026-10-01T00:00:00.000Z", topic: 0 };
+
 const skill = (id: string, rest: Partial<SkillSet> = {}): SkillSet => ({
   id,
   name: `Set ${id}`,
   description: "",
-  quadrant: 0,
   ring: "watch",
   notes: "",
-  skills: [],
+  skills: [member],
   addedAt: "2026-10-01T00:00:00.000Z",
   updatedAt: "2026-10-01T00:00:00.000Z",
   archived: false,
@@ -28,10 +29,9 @@ const edition = (number: number, publishedAt: string, ...published: SkillSet[]):
     id: s.id,
     name: s.name,
     description: s.description,
-    quadrant: s.quadrant,
     ring: s.ring,
     notes: s.notes,
-    skills: s.skills.map((k) => ({ id: k.id, name: k.name, description: k.description, ...(k.score !== undefined ? { score: k.score } : {}), notes: k.notes })),
+    skills: s.skills.map((k) => ({ id: k.id, name: k.name, description: k.description, ...(k.score !== undefined ? { score: k.score } : {}), notes: k.notes, topic: k.topic })),
     change: "unchanged",
   })),
   retired: [],
@@ -41,6 +41,12 @@ describe("the sets per ring", () => {
   test("counts the sets not archived of each ring, zeros included", () => {
     const skills = [skill("a", { ring: "try" }), skill("b", { ring: "try" }), skill("c"), skill("d", { ring: "try", archived: true })];
     assert.deepEqual(widgetSummary(skills, []).counts, { recommended: 0, try: 2, watch: 1, deprecated: 0 });
+  });
+
+  test("a set with no skill is not on the radar, so it is not counted", () => {
+    const skills = [skill("a", { ring: "try" }), skill("b", { ring: "try", skills: [] })];
+    assert.deepEqual(widgetSummary(skills, []).counts, { recommended: 0, try: 1, watch: 0, deprecated: 0 });
+    assert.equal(widgetSummary(skills, []).pending, 1);
   });
 
   test("all zeros when there is no set", () => {
@@ -78,7 +84,7 @@ describe("the changes that wait", () => {
   test("a set whose notes changed or that got a skill does not wait", () => {
     const published = skill("a");
     const editions = [edition(1, "2026-10-02T09:00:00.000Z", published)];
-    const skills = [{ id: "s", name: "S", description: "", notes: "", addedAt: "2026-10-01T00:00:00.000Z", score: 5 }];
+    const skills = [{ id: "s", name: "S", description: "", notes: "", addedAt: "2026-10-01T00:00:00.000Z", score: 5, topic: 0 }];
     assert.equal(widgetSummary([{ ...published, notes: "more", skills }], editions).pending, 0);
   });
 });

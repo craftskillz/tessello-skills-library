@@ -135,4 +135,59 @@ describe("the library in the storage", () => {
     assert.deepEqual(await skillStorage(storage).read(), []);
     assert.deepEqual(sets, []);
   });
+
+  describe("the quadrants of the sets", () => {
+    const withQuadrant = [
+      { id: "a", name: "Alpha", quadrant: 3, skills: [{ id: "s1", name: "S1" }, { id: "s2", name: "S2", topic: 1 }] },
+      { id: "b", name: "Beta", skills: [{ id: "s3", name: "S3", topic: 2 }] },
+    ];
+
+    test("a set that still has a quadrant gives it to its skills, and the converted list is written", async () => {
+      const { storage, values, sets } = fakeStorage();
+      await storage.set("sets", withQuadrant as unknown as Exclude<Json, null>);
+      sets.length = 0;
+      const read = await skillStorage(storage).read();
+      assert.deepEqual(read.flatMap((set) => set.skills.map((skill) => skill.topic)), [3, 1, 2]);
+      assert.equal(read.some((set) => "quadrant" in set), false);
+      assert.deepEqual(sets, ["sets"]);
+      assert.equal(JSON.stringify(values.get("sets")).includes("quadrant"), false);
+    });
+
+    test("the migration is written once: the next read finds no quadrant and writes nothing", async () => {
+      const { storage, sets } = fakeStorage();
+      await storage.set("sets", withQuadrant as unknown as Exclude<Json, null>);
+      const skills = skillStorage(storage);
+      const first = await skills.read();
+      sets.length = 0;
+      assert.deepEqual(await skills.read(), first);
+      assert.deepEqual(sets, []);
+    });
+
+    test("a skill that already has a topic keeps it", async () => {
+      const { storage } = fakeStorage();
+      await storage.set("sets", withQuadrant as unknown as Exclude<Json, null>);
+      const [alpha] = await skillStorage(storage).read();
+      assert.equal(alpha.skills[1].topic, 1);
+    });
+
+    test("a library with no quadrant is not written when read", async () => {
+      const { storage, sets } = fakeStorage();
+      const skills = skillStorage(storage);
+      await skills.write([]);
+      sets.length = 0;
+      await skills.read();
+      assert.deepEqual(sets, []);
+    });
+
+    test("the old model gives its quadrant to the only skill of each set, and nothing is migrated again", async () => {
+      const { storage, sets } = fakeStorage();
+      await storage.set("skills", legacy as unknown as Exclude<Json, null>);
+      const skills = skillStorage(storage);
+      const first = await skills.read();
+      assert.equal(first[0].skills[0].topic, 1);
+      sets.length = 0;
+      await skills.read();
+      assert.deepEqual(sets, []);
+    });
+  });
 });

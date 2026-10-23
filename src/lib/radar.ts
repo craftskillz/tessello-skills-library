@@ -7,14 +7,12 @@ import { RINGS, type Ring } from "./skills.ts";
 export interface RadarEntry {
   id: string;
   name: string;
-  /** 0 to 4: the index of its topic. */
-  quadrant: number;
   ring: Ring;
   change: "new" | "back" | "moved" | "updated" | "unchanged";
   /** The ring it left, for a moved skill: the marker points towards where it went. */
   previousRing?: Ring;
-  /** The skills of the set, in order; each with its score from 1 to 5 when it was evaluated. */
-  skills?: readonly { name: string; score?: number }[];
+  /** The skills of the set, in order: each with its topic (0 to 4) and its score from 1 to 5 when it was evaluated. */
+  skills: readonly { name: string; score?: number; topic: number }[];
 }
 
 /** The words the radar writes, in the language of where it is shown. */
@@ -69,12 +67,23 @@ const GREY = "#7a7a7a";
 /** The stars of the highest score. */
 const STARS = 5;
 
-/** The entries in the order of their numbers: by topic, by ring from the centre, then by name; each with its number from 1. */
+/** The index of a topic as a whole number from 0 up; `count` also caps it when given. */
+const topicIndex = (topic: number, count = Infinity) => Math.min(count - 1, Math.max(0, Math.trunc(topic) || 0));
+
+/** The first topic of a set: the smallest index among its skills. */
+const firstTopic = (entry: RadarEntry) => Math.min(...entry.skills.map((skill) => topicIndex(skill.topic)));
+
+/**
+ * The entries in the order of their numbers: by first topic (the smallest among the topics of its skills), by ring from the
+ * centre, then by name; each with its number from 1. One number per set, shared by all its points. A set without skill has no
+ * point on the radar, so it is left out: only the entries with at least one skill are returned.
+ */
 export function numberEntries<T extends RadarEntry>(entries: readonly T[]): (T & { number: number })[] {
-  return [...entries]
+  return entries
+    .filter((entry) => entry.skills.length > 0)
     .sort(
       (a, b) =>
-        a.quadrant - b.quadrant ||
+        firstTopic(a) - firstTopic(b) ||
         RINGS.indexOf(a.ring) - RINGS.indexOf(b.ring) ||
         a.name.localeCompare(b.name, "en", { sensitivity: "base" }) ||
         (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
@@ -91,7 +100,8 @@ export function renderRadar(
   const { labels, background } = options;
   const count = Math.max(1, topics.length);
   const numbered = numberEntries(entries);
-  const points = place(numbered, count);
+  const dots = numbered.flatMap((entry) => topicsOf(entry, count).map((topic) => ({ entry, topic })));
+  const points = place(dots, count);
   const parts: string[] = [];
   if (background) parts.push(`<rect width="100%" height="100%" fill="${escape(background)}"/>`);
 
@@ -115,12 +125,12 @@ export function renderRadar(
   // The name of each topic outside the circle, at the middle angle of its sector.
   for (let k = 0; k < count; k++) parts.push(topicName(String(topics[k] ?? ""), k, count));
 
-  for (const entry of numbered) {
-    const { x, y } = points.get(entry.id)!;
-    const colour = COLOURS[entry.quadrant] ?? COLOURS[0];
-    const title = escape(tooltip(entry, entry.number, labels));
+  for (const { entry, topic } of dots) {
+    const { x, y } = points.get(keyOf(entry, topic))!;
+    const colour = COLOURS[topic] ?? COLOURS[0];
+    const title = escape(tooltip(entry, topic, topics, entry.number, labels));
     parts.push(
-      `<g data-set-id="${escape(entry.id)}" data-number="${entry.number}" transform="translate(${round(x)} ${round(y)})">` +
+      `<g data-set-id="${escape(entry.id)}" data-number="${entry.number}" data-topic="${topic}" transform="translate(${round(x)} ${round(y)})">` +
         marker(entry, colour) +
         `<text y="0.35em" font-size="10" font-weight="bold" text-anchor="middle" fill="#ffffff" font-family='${FONT}'>${entry.number}</text>` +
         `<title>${title}</title></g>`,
@@ -135,10 +145,16 @@ export function renderRadar(
   );
 }
 
-/** What a dot says when hovered: its number, its name and its ring, then a line per skill with its stars. */
-function tooltip(entry: RadarEntry, number: number, labels: RadarLabels): string {
-  const lines = [`${number}. ${entry.name} — ${labels.rings[entry.ring]}`];
-  for (const skill of entry.skills ?? []) lines.push(`${skill.name} ${skill.score === undefined ? `(${labels.notEvaluated})` : stars(skill.score)}`);
+/** The topics of a set, once each and in order, capped to the sectors there are. */
+function topicsOf(entry: RadarEntry, count: number): number[] {
+  return [...new Set(entry.skills.map((skill) => topicIndex(skill.topic, count)))].sort((a, b) => a - b);
+}
+
+/** What a point says when hovered: its number, its set, its ring and its topic, then a line per skill of that topic with its stars. */
+function tooltip(entry: RadarEntry, topic: number, topics: readonly string[], number: number, labels: RadarLabels): string {
+  const count = Math.max(1, topics.length);
+  const lines = [`${number}. ${entry.name} — ${labels.rings[entry.ring]} · ${topics[topic] ?? ""}`];
+  for (const skill of entry.skills.filter((skill) => topicIndex(skill.topic, count) === topic)) lines.push(`${skill.name} ${skill.score === undefined ? `(${labels.notEvaluated})` : stars(skill.score)}`);
   return lines.join("\n");
 }
 
@@ -234,34 +250,42 @@ interface Point {
   y: number;
 }
 
+/** What identifies a point: its set and its topic. */
+const keyOf = (entry: RadarEntry, topic: number) => `${entry.id}#${topic}`;
+
+/** A point of a set in one of its topics. */
+interface Dot {
+  entry: RadarEntry;
+  topic: number;
+}
+
 /**
- * The centre of each dot by id. A dot draws its candidates from a stream seeded by its id, inside its sector and ring;
- * the first one clear of the boundaries of its sector and the ring boundaries is its own place. The dots are placed in the order of their
- * numbers: when a place is too close to a dot already placed it takes the next candidate, and when none is free it takes
- * the one farthest from the others. So an id keeps its place whatever the other cells hold.
+ * The centre of each point by set id and topic. A point draws its candidates from a stream seeded by its id and its topic, inside its sector and ring;
+ * the first one clear of the boundaries of its sector and the ring boundaries is its own place. The points are placed in the order of their
+ * numbers, then of their topics: when a place is too close to a point already placed it takes the next candidate, and when none is free it takes
+ * the one farthest from the others. So a set keeps its place in a topic whatever the other cells hold.
  */
-function place(entries: readonly RadarEntry[], count: number): Map<string, Point> {
+function place(dots: readonly Dot[], count: number): Map<string, Point> {
   const placed = new Map<string, Point>();
   const taken: Point[] = [];
-  for (const entry of entries) {
-    const candidates = candidatesOf(entry, count);
+  for (const dot of dots) {
+    const candidates = candidatesOf(dot, count);
     // A crowded cell comes down to dots that merely touch (2 × DOT) before a dot is laid on another.
     const clear = (apart: number) => (candidate: Point) => taken.every((other) => distance(candidate, other) >= apart);
-    const cell = scan(entry, count);
+    const cell = scan(dot, count);
     const best = candidates.find(clear(APART)) ?? cell.find(clear(APART)) ?? cell.find(clear(2 * DOT)) ?? farthest(candidates, taken);
-    placed.set(entry.id, best);
+    placed.set(keyOf(dot.entry, dot.topic), best);
     taken.push(best);
   }
   return placed;
 }
 
 /** The bounds of the cell of an entry: the radii a dot may sit between, and the angles where its sector starts and ends. */
-function cellOf(entry: RadarEntry, count: number) {
+function cellOf({ entry, topic: sector }: Dot, count: number) {
   const ring = Math.max(0, RINGS.indexOf(entry.ring));
   const inner = ring === 0 ? 0 : RING_ENDS[ring - 1] * RADIUS + EDGE;
   const outer = RING_ENDS[ring] * RADIUS - EDGE;
-  const topic = Math.min(count - 1, Math.max(0, Math.trunc(entry.quadrant) || 0));
-  const start = sectorStart(count) + topic * sectorWidth(count);
+  const start = sectorStart(count) + topicIndex(sector, count) * sectorWidth(count);
   return { inner, outer, start, end: start + sectorWidth(count) };
 }
 
@@ -285,8 +309,8 @@ const clearOfAxes = (point: Point, cell: { start: number; end: number }) =>
   (point.x < CX || Math.abs(point.y - RING_NAMES_MIDDLE) >= RING_NAMES_ROOM);
 
 /** Every place of the cell on a fine grid, from the outside in: the last resort of a crowded cell, still deterministic. */
-function scan(entry: RadarEntry, count: number): Point[] {
-  const cell = cellOf(entry, count);
+function scan(dot: Dot, count: number): Point[] {
+  const cell = cellOf(dot, count);
   const { inner, outer, start } = cell;
   const width = sectorWidth(count);
   const found: Point[] = [];
@@ -302,9 +326,9 @@ function scan(entry: RadarEntry, count: number): Point[] {
 }
 
 /** The valid candidates of a dot, in the order of its stream. */
-function candidatesOf(entry: RadarEntry, count: number): Point[] {
-  const random = mulberry32(fnv1a(entry.id));
-  const cell = cellOf(entry, count);
+function candidatesOf(dot: Dot, count: number): Point[] {
+  const random = mulberry32(fnv1a(keyOf(dot.entry, dot.topic)));
+  const cell = cellOf(dot, count);
   const { inner, outer, start } = cell;
   const width = sectorWidth(count);
   const found: Point[] = [];

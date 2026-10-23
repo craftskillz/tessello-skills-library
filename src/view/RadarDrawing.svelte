@@ -5,7 +5,7 @@
   import { t } from "../lib/i18n.ts";
   import { placePanel } from "../lib/panel-position.ts";
   import { stars } from "../lib/radar.ts";
-  import type { SkillSet } from "../lib/skills.ts";
+  import { type SkillSet, setTopics } from "../lib/skills.ts";
   import { sets, settings } from "../lib/store.svelte.ts";
   import { ringName } from "./change-tag.ts";
 
@@ -148,7 +148,7 @@
         <dt>{t("ring")}</dt>
         <dd>{ringName(set.ring)}</dd>
         <dt>{t("topic")}</dt>
-        <dd>{settings.topics[set.quadrant]}</dd>
+        <dd>{setTopics(set).map((index) => settings.topics[index]).join(", ")}</dd>
       </dl>
       <ul class="sl-radar-panel-skills">
         {#each set.skills as skill (skill.id)}

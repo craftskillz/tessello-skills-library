@@ -4,7 +4,7 @@
   import { t, type MessageKey } from "../lib/i18n.ts";
   import { stars } from "../lib/radar.ts";
   import { DESCRIPTION_MAX, NAME_MAX, type Skill } from "../lib/skills.ts";
-  import { editSkill } from "../lib/store.svelte.ts";
+  import { editSkill, settings } from "../lib/store.svelte.ts";
 
   let { setId, skill, open = false, onRemove }: { setId: string; skill: Skill; open?: boolean; onRemove: (skill: Skill) => void } = $props();
 
@@ -38,6 +38,7 @@
 <details class="sl-skill-section" {open} data-skill-section={skill.id}>
   <summary>
     <span class="sl-skill-title">{skill.name}</span>
+    <span class="sl-skill-topic">{settings.topics[skill.topic]}</span>
     {#if skill.goneUpstream}<span class="sl-skill-gone">{t("gone_upstream")}</span>{/if}
     {#if skill.score !== undefined}
       <span class="sl-skill-score" role="img" aria-label={t("stars", { score: skill.score })}>{stars(skill.score)}</span>
@@ -74,6 +75,14 @@
     <label>
       {t("description")}
       <textarea rows="3" maxlength={DESCRIPTION_MAX} bind:value={description} oninput={() => save({ description })}></textarea>
+    </label>
+    <label>
+      {t("topic")}
+      <select value={String(skill.topic)} onchange={(event) => save({ topic: Number(event.currentTarget.value) })}>
+        {#each settings.topics as topic, index (index)}
+          <option value={String(index)}>{topic}</option>
+        {/each}
+      </select>
     </label>
     <fieldset class="sl-choice">
       <legend>{t("score")}</legend>
@@ -127,8 +136,14 @@
     min-width: 0;
     overflow-wrap: anywhere;
   }
-  .sl-skill-gone {
+  .sl-skill-topic {
     margin-left: auto;
+    font-weight: 400;
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .sl-skill-gone {
     font-weight: 400;
     font-size: 12px;
     color: var(--red);
@@ -158,7 +173,8 @@
     font-size: 13px;
   }
   .sl-skill-body input[type="text"],
-  .sl-skill-body textarea {
+  .sl-skill-body textarea,
+  .sl-skill-body select {
     padding: 8px 10px;
     border-radius: 8px;
     border: 1px solid var(--line);
@@ -167,7 +183,8 @@
     font: inherit;
   }
   .sl-skill-body input:focus,
-  .sl-skill-body textarea:focus {
+  .sl-skill-body textarea:focus,
+  .sl-skill-body select:focus {
     outline: 2px solid var(--accent);
     outline-offset: -1px;
   }

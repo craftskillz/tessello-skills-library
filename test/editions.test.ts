@@ -11,6 +11,7 @@ const member = (id: string, rest: Partial<Skill> = {}): Skill => ({
   description: "",
   notes: "",
   addedAt: "2026-10-01T00:00:00.000Z",
+  topic: 0,
   ...rest,
 });
 
@@ -18,10 +19,9 @@ const skill = (id: string, rest: Partial<SkillSet> = {}): SkillSet => ({
   id,
   name: `Set ${id}`,
   description: "",
-  quadrant: 0,
   ring: "watch",
   notes: "",
-  skills: [],
+  skills: [member("m")],
   addedAt: "2026-10-01T00:00:00.000Z",
   updatedAt: "2026-10-01T00:00:00.000Z",
   archived: false,
@@ -33,7 +33,7 @@ const edition = (number: number, ...entries: Partial<Edition["entries"][number]>
   publishedAt: "2026-10-10T00:00:00.000Z",
   intro: "Hello",
   topics: ["A", "B", "C", "D", "E"],
-  entries: entries.map((entry) => ({ id: "a", name: "Set a", quadrant: 0, ring: "watch", change: "new", description: "", notes: "", skills: [], ...entry })),
+  entries: entries.map((entry) => ({ id: "a", name: "Set a", ring: "watch", change: "new", description: "", notes: "", skills: [{ id: "m", name: "Skill m", description: "", notes: "", topic: 0 }], ...entry })),
   retired: [],
 });
 
@@ -63,6 +63,10 @@ describe("the moves that miss an explanation", () => {
       skill("c", { ring: "try", archived: true }),
     ];
     assert.deepEqual(missingReasons(skills, editions).map((item) => item.id), ["d", "a"]);
+  });
+
+  test("leaves out a set with no skill, which is not on the radar", () => {
+    assert.deepEqual(missingReasons([skill("a", { ring: "try", skills: [] })], editions), []);
   });
 
   test("lists nothing when no skill moved", () => {
@@ -100,10 +104,9 @@ describe("publishing an edition", () => {
           name: "TDD",
           sourceUrl: "https://x.test/a",
           description: "d",
-          quadrant: 2,
           ring: "try",
           notes: "n",
-          skills: [member("s1", { name: "Red", sourceUrl: "https://x.test/s1", description: "sd", score: 4, notes: "sn" }), member("s2")],
+          skills: [member("s1", { name: "Red", sourceUrl: "https://x.test/s1", description: "sd", score: 4, notes: "sn", topic: 2 }), member("s2", { topic: 4 })],
         }),
       ],
       topics,
@@ -118,16 +121,31 @@ describe("publishing an edition", () => {
         name: "TDD",
         sourceUrl: "https://x.test/a",
         description: "d",
-        quadrant: 2,
         ring: "try",
         notes: "n",
         change: "new",
         skills: [
-          { id: "s1", name: "Red", sourceUrl: "https://x.test/s1", description: "sd", score: 4, notes: "sn" },
-          { id: "s2", name: "Skill s2", description: "", notes: "" },
+          { id: "s1", name: "Red", sourceUrl: "https://x.test/s1", description: "sd", score: 4, notes: "sn", topic: 2 },
+          { id: "s2", name: "Skill s2", description: "", notes: "", topic: 4 },
         ],
       },
     ]);
+  });
+
+  test("the entry has no topic of its own, since the topics are the ones of its skills", () => {
+    const result = publishEdition([skill("a", { skills: [member("s1", { topic: 1 })] })], topics, [], "Intro", now);
+    assert.ok("edition" in result);
+    assert.equal("quadrant" in result.edition.entries[0], false);
+    assert.equal("topic" in result.edition.entries[0], false);
+  });
+
+  test("a set with no skill is not frozen, and is retired when the last edition had it", () => {
+    const sets = [skill("a", { skills: [] }), skill("b", { skills: [] }), skill("c")];
+    const result = publishEdition(sets, topics, [edition(1, { id: "a", ring: "try" })], "Intro", now);
+    assert.ok("edition" in result);
+    assert.deepEqual(result.edition.entries.map((entry) => entry.id), ["c"]);
+    assert.deepEqual(result.edition.retired, [{ id: "a", name: "Set a", previousRing: "try" }]);
+    assert.deepEqual(result.summary.counts, { recommended: 0, try: 0, watch: 1, deprecated: 0 });
   });
 
   test("the number follows the highest one", () => {
@@ -142,17 +160,17 @@ describe("publishing an edition", () => {
     const result = publishEdition([skill("a", { ring: "recommended", moveReason: " Proven " })], topics, [edition(1, { id: "a" })], "Intro", now);
     assert.ok("edition" in result);
     assert.deepEqual(result.edition.entries[0], {
-      id: "a", name: "Set a", description: "", quadrant: 0, ring: "recommended", notes: "", skills: [], change: "moved", previousRing: "watch", moveReason: "Proven",
+      id: "a", name: "Set a", description: "", ring: "recommended", notes: "", skills: [{ id: "m", name: "Skill m", description: "", notes: "", topic: 0 }], change: "moved", previousRing: "watch", moveReason: "Proven",
     });
   });
 
   test("a moved set carries what changed among its skills, and an updated one too, but not an unchanged one", () => {
     const sets = [
       skill("m", { ring: "try", moveReason: "Why", skills: [member("s1", { score: 5 })] }),
-      skill("u", { skills: [member("s2")] }),
+      skill("u", { skills: [member("m"), member("s2")] }),
       skill("n", { notes: "same" }),
     ];
-    const published = edition(1, { id: "m", skills: [{ id: "s1", name: "Skill s1", description: "", notes: "" }] }, { id: "u" }, { id: "n", notes: "same" });
+    const published = edition(1, { id: "m", skills: [{ id: "s1", name: "Skill s1", description: "", notes: "", topic: 0 }] }, { id: "u" }, { id: "n", notes: "same" });
     const result = publishEdition(sets, topics, [published], "Intro", now);
     assert.ok("edition" in result);
     const [moved, updated, unchanged] = result.edition.entries;
@@ -225,7 +243,7 @@ describe("reading a stored edition", () => {
     assert.ok(read);
     assert.equal(read.intro, "");
     assert.deepEqual(read.topics, DEFAULT_TOPICS.slice(0, 4));
-    assert.deepEqual(read.entries, [{ id: "b", name: "B", description: "", quadrant: 0, ring: "watch", notes: "", change: "unchanged", skills: [] }]);
+    assert.deepEqual(read.entries, [{ id: "b", name: "B", description: "", ring: "watch", notes: "", change: "unchanged", skills: [] }]);
     assert.deepEqual(read.retired, [{ id: "r", name: "R", previousRing: "try" }]);
   });
 
@@ -243,8 +261,8 @@ describe("reading a stored edition", () => {
       ],
     });
     assert.deepEqual(read?.entries[0].skills, [
-      { id: "s1", name: "S1", description: "", notes: "n" },
-      { id: "s2", name: "S2", sourceUrl: "https://x.test", description: "d", score: 2, notes: "" },
+      { id: "s1", name: "S1", description: "", notes: "n", topic: 0 },
+      { id: "s2", name: "S2", sourceUrl: "https://x.test", description: "d", score: 2, notes: "", topic: 0 },
     ]);
     assert.deepEqual(read?.entries[0].skillChanges, { added: [{ id: "s2", name: "S2" }], removed: [], scores: [{ id: "s1", name: "S1", before: 2 }, { id: "s2", name: "S2", after: 4 }] });
   });
@@ -261,11 +279,10 @@ describe("reading a stored edition", () => {
         name: "Old",
         sourceUrl: "https://x.test",
         description: "d",
-        quadrant: 1,
         ring: "try",
         notes: "",
         change: "new",
-        skills: [{ id: legacySkillId("old"), name: "Old", sourceUrl: "https://x.test", description: "d", score: 4, notes: "kept" }],
+        skills: [{ id: legacySkillId("old"), name: "Old", sourceUrl: "https://x.test", description: "d", score: 4, notes: "kept", topic: 1 }],
       },
     ]);
   });
@@ -291,9 +308,23 @@ describe("reading a stored edition", () => {
     assert.deepEqual(read?.topics, ["One", DEFAULT_TOPICS[1], DEFAULT_TOPICS[2], "Four"]);
   });
 
-  test("an entry in the fifth topic is read as such", () => {
-    const read = readEdition({ number: 1, publishedAt: "2026-10-10T00:00:00Z", entries: [{ id: "a", name: "A", skills: [], quadrant: 4 }] });
-    assert.equal(read?.entries[0].quadrant, 4);
+  test("an edition published with the quadrant on the entry gives it as topic to each of its skills, and is not rewritten", () => {
+    const stored = { number: 1, publishedAt: "2026-10-10T00:00:00Z", entries: [{ id: "a", name: "A", quadrant: 4, skills: [{ id: "s1", name: "S1" }, { id: "s2", name: "S2" }] }] };
+    const before = JSON.stringify(stored);
+    const read = readEdition(stored);
+    assert.deepEqual(read?.entries[0].skills.map((item) => item.topic), [4, 4]);
+    assert.equal("quadrant" in (read?.entries[0] ?? {}), false);
+    assert.equal(JSON.stringify(stored), before);
+  });
+
+  test("a skill that has a topic in its entry keeps it, whatever the quadrant of the entry", () => {
+    const read = readEdition({ number: 1, publishedAt: "2026-10-10T00:00:00Z", entries: [{ id: "a", name: "A", quadrant: 2, skills: [{ id: "s1", name: "S1", topic: 4 }, { id: "s2", name: "S2", topic: 9 }, { id: "s3", name: "S3" }] }] });
+    assert.deepEqual(read?.entries[0].skills.map((item) => item.topic), [4, 2, 2]);
+  });
+
+  test("a skill with no topic nor quadrant anywhere takes 0", () => {
+    const read = readEdition({ number: 1, publishedAt: "2026-10-10T00:00:00Z", entries: [{ id: "a", name: "A", quadrant: 8, skills: [{ id: "s1", name: "S1" }] }] });
+    assert.equal(read?.entries[0].skills[0].topic, 0);
   });
 });
 
