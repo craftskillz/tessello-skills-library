@@ -72,14 +72,19 @@ describe("the frontmatter", () => {
 
 describe("the radar", () => {
   test("is the SVG of the edition on one line, followed by the numbered legend in French", () => {
-    const body = bodyOf(edition({}, entry("a", { name: "Beta", ring: "try", skills: [skill("1")] }), entry("b", { name: "Alpha", ring: "recommended", skills: [skill("2"), skill("3")] })));
+    const body = bodyOf(edition({}, entry("a", { name: "Beta", ring: "try", skills: [skill("1")] }), entry("b", { name: "Alpha", ring: "recommended", skills: [skill("2"), skill("3", { topic: 2 })] })));
     const line = body.split("\n").find((l) => l.includes("<svg"));
     assert.ok(line);
     assert.ok(line.includes("</svg>"));
     assert.ok(line.includes("Radar des skills: Design, Code, Writing, Tooling"));
     assert.ok(line.includes("Recommandé") && line.includes("À surveiller"));
-    assert.ok(body.includes("1. Alpha — Recommandé (2 skills)"));
-    assert.ok(body.includes("2. Beta — À essayer (1 skill)"));
+    assert.ok(body.includes("1. Alpha — Recommandé · Design, Writing (2 skills)"));
+    assert.ok(body.includes("2. Beta — À essayer · Design (1 skill)"));
+  });
+
+  test("names the topics of each set in its legend line, in the order of the topics, once each", () => {
+    const body = bodyOf(edition({}, entry("a", { name: "Alpha", skills: [skill("1", { topic: 3 }), skill("2", { topic: 1 }), skill("3", { topic: 3 })] })));
+    assert.ok(body.includes("1. Alpha — À surveiller · Code, Tooling (3 skills)"));
   });
 
   test("lists the skills of each set in the title of the radar, with their stars or that they are not rated yet, and keeps the SVG on one line", () => {
@@ -97,7 +102,7 @@ describe("the radar", () => {
 
   test("does not break the legend with the characters of a name", () => {
     const body = bodyOf(edition({}, entry("a", { name: "<b>[x]</b> *y*" })));
-    assert.ok(body.includes("1. &lt;b&gt;\\[x\\]&lt;/b&gt; \\*y\\* — À surveiller (1 skill)"));
+    assert.ok(body.includes("1. &lt;b&gt;\\[x\\]&lt;/b&gt; \\*y\\* — À surveiller · Design (1 skill)"));
   });
 });
 
@@ -120,13 +125,23 @@ describe("what moves", () => {
       edition({}, entry("a", { skills: [skill("s1", { name: "Linked", sourceUrl: "https://s.dev", score: 4, description: "Does it." }), skill("s2", { name: "Plain" })] })),
     );
     assert.ok(
-      body.includes("| Skill | Note | Description |\n| --- | --- | --- |\n| [Linked](https://s.dev) | ★★★★☆ | Does it. |\n| Plain | *Pas encore évaluée* | |"),
+      body.includes("| Skill | Thème | Note | Description |\n| --- | --- | --- | --- |\n| [Linked](https://s.dev) | Design | ★★★★☆ | Does it. |\n| Plain | Design | *Pas encore évaluée* | |"),
     );
+  });
+
+  test("sorts the skills of the table by topic, keeping their order within a topic, and names the topic of each", () => {
+    const body = bodyOf(edition({}, entry("a", { skills: [skill("1", { name: "Late", topic: 3 }), skill("2", { name: "First", topic: 0 }), skill("3", { name: "Later", topic: 3 }), skill("4", { name: "Mid", topic: 1 })] })));
+    assert.ok(body.includes("| Skill | Thème | Note | Description |\n| --- | --- | --- | --- |\n| First | Design | *Pas encore évaluée* | |\n| Mid | Code | *Pas encore évaluée* | |\n| Late | Tooling | *Pas encore évaluée* | |\n| Later | Tooling | *Pas encore évaluée* | |"));
+  });
+
+  test("escapes the name of a topic in a cell and falls back to the last name for a topic out of range", () => {
+    const body = bodyOf(edition({ topics: ["A|B", "Last"] }, entry("a", { skills: [skill("1", { name: "X", topic: 0 }), skill("2", { name: "Y", topic: 9 })] })));
+    assert.ok(body.includes("| X | A\\|B |") && body.includes("| Y | Last |"));
   });
 
   test("keeps the cells of the table on their line, whatever the skills hold", () => {
     const body = bodyOf(edition({}, entry("a", { skills: [skill("s1", { name: "A|B", description: "one | two\nthree" })] })));
-    assert.ok(body.includes("| A\\|B | *Pas encore évaluée* | one \\| two three |"));
+    assert.ok(body.includes("| A\\|B | Design | *Pas encore évaluée* | one \\| two three |"));
   });
 
   test("leaves the table out when the set has no skills", () => {
@@ -182,13 +197,29 @@ describe("what moves", () => {
       number: 1,
       publishedAt: "2026-01-01T00:00:00.000Z",
       intro: "Hello",
+      quadrants: ["Techniques", "Tools", "Platforms", "Languages"],
       entries: [{ id: "old", name: "Old skill", quadrant: 1, ring: "try", change: "new", description: "Was one skill.", score: 4, notes: "# Why\n\nBecause." }],
     };
     const published = readEdition(stored);
     assert.ok(published);
     const body = bodyOf(published);
-    assert.ok(body.includes("| Old skill | ★★★★☆ | Was one skill. |"));
+    assert.ok(body.includes("| Old skill | Tools | ★★★★☆ | Was one skill. |"));
     assert.ok(body.includes("\n#### Old skill\n\n##### Why\n\nBecause."));
+  });
+
+  test("gives an old edition (four topics, the topic of the set given to its skill) the topic in its legend and its table, with the old names", () => {
+    const stored = {
+      number: 1,
+      publishedAt: "2026-01-01T00:00:00.000Z",
+      intro: "Hello",
+      quadrants: ["Techniques", "Tools", "Platforms", "Languages"],
+      entries: [{ id: "old", name: "Old skill", quadrant: 1, ring: "try", change: "new", description: "Was one skill.", score: 4, notes: "" }],
+    };
+    const published = readEdition(stored);
+    assert.ok(published);
+    const body = bodyOf(published);
+    assert.ok(body.includes("1. Old skill — À essayer · Tools (1 skill)"));
+    assert.ok(body.includes("| Old skill | Tools | ★★★★☆ | Was one skill. |"));
   });
 
   test("groups the cards by ring, from the centre outwards", () => {

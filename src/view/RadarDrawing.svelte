@@ -1,24 +1,26 @@
 <script lang="ts">
-  // The radar of the Radar tab, and the panel that tells what the set of a point holds: on hover, on a tap, or from the
-  // keyboard. A click on a point, or on the name in the panel, opens the set.
+  // The radar of the Radar tab, and the panel that tells what a point holds, the skills of its set in its topic: on hover,
+  // on a tap, or from the keyboard. A click on a point, or on the name in the panel, opens the set.
   import { untrack } from "svelte";
   import { t } from "../lib/i18n.ts";
   import { placePanel } from "../lib/panel-position.ts";
   import { stars } from "../lib/radar.ts";
-  import { type SkillSet, setTopics } from "../lib/skills.ts";
+  import type { SkillSet } from "../lib/skills.ts";
   import { sets, settings } from "../lib/store.svelte.ts";
   import { ringName } from "./change-tag.ts";
 
   let { svg, onOpen }: { svg: string; onOpen: (set: SkillSet) => void } = $props();
 
-  // The panel of a point: what its set holds. The drawing is the one of the blog post, so the View makes its points
-  // interactive once it is in the page, and finds them again by their `data-set-id`.
+  // The panel of a point, which is a set and a topic. The drawing is the one of the blog post, so the View makes its points
+  // interactive once it is in the page, and finds them again by their `data-set-id` and `data-topic`.
   let radarBox = $state<HTMLDivElement>();
   let panelBox = $state<HTMLDivElement>();
   let openId = $state<string | null>(null);
+  let openTopic = $state(0);
   /** Where the panel sits in the radar's box; none until it has been measured. */
   let position = $state<{ left: number; top: number } | null>(null);
   const panelSet = $derived(openId === null ? undefined : sets.list.find((item) => item.id === openId));
+  const panelSkills = $derived(panelSet?.skills.filter((skill) => skill.topic === openTopic) ?? []);
   /** The kind of the last pointer that went down: a mouse click opens the set, a tap opens the panel. */
   let pointerType = "mouse";
   let closing: ReturnType<typeof setTimeout> | undefined;
@@ -44,7 +46,7 @@
   // Once the panel has its content it is measured, then put near its point, inside the box of the radar.
   $effect(() => {
     if (!radarBox || !panelBox || openId === null || position) return;
-    const point = [...radarBox.querySelectorAll("[data-set-id]")].find((item) => item.getAttribute("data-set-id") === openId);
+    const point = [...radarBox.querySelectorAll("[data-set-id]")].find((item) => item.getAttribute("data-set-id") === openId && Number(item.getAttribute("data-topic")) === openTopic);
     if (!point) return;
     const area = radarBox.getBoundingClientRect();
     const at = point.getBoundingClientRect();
@@ -55,7 +57,8 @@
   function open(point: Element) {
     clearTimeout(closing);
     const id = point.getAttribute("data-set-id");
-    if (id === openId) return;
+    const topic = Number(point.getAttribute("data-topic"));
+    if (id === openId && topic === openTopic) return;
     restoreTitles();
     // The panel says what the native tooltip would, so the tooltip is emptied while the panel is open.
     const title = point.querySelector(":scope > title");
@@ -64,6 +67,7 @@
       title.textContent = "";
     }
     position = null;
+    openTopic = topic;
     openId = id;
   }
 
@@ -148,10 +152,10 @@
         <dt>{t("ring")}</dt>
         <dd>{ringName(set.ring)}</dd>
         <dt>{t("topic")}</dt>
-        <dd>{setTopics(set).map((index) => settings.topics[index]).join(", ")}</dd>
+        <dd>{settings.topics[openTopic]}</dd>
       </dl>
       <ul class="sl-radar-panel-skills">
-        {#each set.skills as skill (skill.id)}
+        {#each panelSkills as skill (skill.id)}
           <li>
             <span class="sl-radar-panel-skill">{skill.name}</span>
             {#if skill.score === undefined}

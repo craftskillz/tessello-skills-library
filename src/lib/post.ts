@@ -54,8 +54,8 @@ export function renderPost(edition: Edition): string {
   ].join("\n");
 
   const sections = [edition.intro.trim(), renderRadar(edition.entries, edition.topics, { labels: POST_RADAR_LABELS })];
-  if (entries.length > 0) sections.push(entries.map((entry) => `${entry.number}. ${markdownText(entry.name)} — ${FRENCH_RINGS[entry.ring]} (${skillCount(entry)})`).join("\n"));
-  if (moved.length > 0) sections.push("## Ce qui bouge", ...byRing(moved, card));
+  if (entries.length > 0) sections.push(entries.map((entry) => `${entry.number}. ${markdownText(entry.name)} — ${FRENCH_RINGS[entry.ring]}${legendTopics(entry, edition.topics)} (${skillCount(entry)})`).join("\n"));
+  if (moved.length > 0) sections.push("## Ce qui bouge", ...byRing(moved, (group) => card(group, edition.topics)));
   if (rest.length > 0) sections.push("## Le reste du radar", ...byRing(rest, compactList));
   if (edition.retired.length > 0) {
     sections.push("## Retirés du radar", edition.retired.map((skill) => `- ${markdownText(skill.name)} — ${FRENCH_RINGS[skill.previousRing]}`).join("\n"));
@@ -73,7 +73,7 @@ function byRing(entries: readonly Numbered[], render: (entries: Numbered[]) => s
 }
 
 /** The full card of each set: its heading, its badge, why it moved, what it is, where it comes from, its notes and its skills. */
-function card(entries: Numbered[]): string {
+function card(entries: Numbered[], topics: readonly string[]): string {
   return entries
     .map((entry) => {
       const parts = [`### ${entry.number}. ${markdownText(entry.name)}`, `*${badge(entry)}*`];
@@ -82,7 +82,7 @@ function card(entries: Numbered[]): string {
       if (entry.sourceUrl) parts.push(`[${markdownText(entry.sourceUrl)}](${destination(entry.sourceUrl)})`);
       if (entry.notes.trim()) parts.push(shiftNoteHeadings(entry.notes.trim(), SET_NOTES_LEVEL));
       if (entry.change === "moved" && entry.skillChanges) parts.push(changeParts(entry.skillChanges).map((part) => `- ${part}`).join("\n"));
-      if (entry.skills.length > 0) parts.push(skillTable(entry.skills));
+      if (entry.skills.length > 0) parts.push(skillTable(entry.skills, topics));
       for (const skill of entry.skills) {
         if (hasContent(skill.notes)) parts.push(`#### ${markdownText(skill.name)}`, shiftNoteHeadings(skill.notes.trim(), SKILL_NOTES_LEVEL));
       }
@@ -91,14 +91,14 @@ function card(entries: Numbered[]): string {
     .join("\n\n");
 }
 
-/** The table of the skills of a set: their name, linked when they have a source, their stars or that they are not rated yet, and their description. */
-function skillTable(skills: readonly EditionSkill[]): string {
-  const rows = skills.map((skill) => {
+/** The table of the skills of a set: sorted by topic (stable), their name, linked when they have a source, their topic, their stars or that they are not rated yet, and their description. */
+function skillTable(skills: readonly EditionSkill[], topics: readonly string[]): string {
+  const rows = [...skills].sort((a, b) => a.topic - b.topic).map((skill) => {
     const name = cell(skill.name);
     const description = cell(skill.description).trim();
-    return `| ${skill.sourceUrl ? `[${name}](${destination(skill.sourceUrl)})` : name} | ${rating(skill.score)} |${description ? ` ${description} ` : " "}|`;
+    return `| ${skill.sourceUrl ? `[${name}](${destination(skill.sourceUrl)})` : name} | ${cell(topicName(topics, skill.topic))} | ${rating(skill.score)} |${description ? ` ${description} ` : " "}|`;
   });
-  return ["| Skill | Note | Description |", "| --- | --- | --- |", ...rows].join("\n");
+  return ["| Skill | Thème | Note | Description |", "| --- | --- | --- | --- |", ...rows].join("\n");
 }
 
 /** A line per set: its number, its name, linked when it has a source, its number of skills, and whether it was updated. */
@@ -110,6 +110,15 @@ function compactList(entries: Numbered[]): string {
       return `- **${entry.number}.** ${title} (${skillCount(entry)})${entry.change === "updated" ? ` — *mis à jour*${entry.skillChanges ? ` : ${changeParts(entry.skillChanges).join(" ; ")}` : ""}` : ""}`;
     })
     .join("\n");
+}
+
+/** The name of the topic of a skill; the last name when the topic is out of range. */
+const topicName = (topics: readonly string[], topic: number) => topics[topic] ?? topics[topics.length - 1] ?? "";
+
+/** The topics of the skills of a set for its legend line: " · " then the distinct names, in the order of the topics; nothing for a set with no skill. */
+function legendTopics(entry: EditionEntry, topics: readonly string[]): string {
+  const names = [...new Set(entry.skills.map((skill) => skill.topic))].sort((a, b) => a - b).map((topic) => markdownText(topicName(topics, topic)));
+  return names.length > 0 ? ` · ${[...new Set(names)].join(", ")}` : "";
 }
 
 /** How many skills a set holds, as the post says it. */
