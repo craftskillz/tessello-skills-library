@@ -2,7 +2,7 @@
   "convention": 1,
   "id": "@craftskillz/skills-library",
   "name": "Skills Library",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Keep the agent skills you have judged, place them on a radar, and publish it as a blog post.",
   "icon": "icon.svg",
   "view": {

@@ -113,7 +113,7 @@ While a moved set has no explanation, the dialog lists those sets instead of pub
 
 The **Editions** tab lists the editions you published, the newest first: its number, its date and how many sets it holds in each ring. An edition is never changed.
 
-**Download .zip** gives the post of an edition, ready for the blog: unzip it at the root of the blog. It holds the post (`_posts/skills-radar-edition-<n>.md`) and its cover, the radar as an image (`public/assets/blog/skills-radar-edition-<n>/cover.png`). The post has your introduction, the radar with its legend, a card for each set that is new, back or moved (with its skills, their topics, stars and notes), the rest of the radar and the sets retired. You can download any edition again, at any time.
+**Download .zip** gives the post of an edition, ready for the blog: unzip it at the root of the blog. It holds the post (`_posts/skills-radar-edition-<n>.md`) and its cover, the radar as an image (`public/assets/blog/skills-radar-edition-<n>/cover.png`). The post has your introduction, the radar with its legend, a card for each set that is new, back or moved (with its skills, their topics, stars and notes), the rest of the radar and the sets retired. The generated headings and labels, including those in the radar and cover, are always in English. Your introduction, names, descriptions, topics and notes appear as you wrote them. You can download any edition again, at any time.
 
 ## The widget
 

@@ -29,6 +29,14 @@ const edition = (rest: Partial<Edition> = {}, ...entries: EditionEntry[]): Editi
 
 const bodyOf = (published: Edition) => matter(renderPost(published)).content.trimStart();
 
+test("exports English publication text, including the embedded radar", () => {
+  const post = renderPost(edition({}, entry("a", { name: "Alpha" })));
+  for (const label of ["Skills Radar — Edition 2", "Recommended", "Try", "Watch", "Deprecated", "What's changed", "Not evaluated", "Inspired by Thoughtworks' Technology Radar."]) {
+    assert.ok(post.includes(label), `Missing English publication text: ${label}`);
+  }
+  assert.doesNotMatch(post, /Recommandé|À essayer|À surveiller|Déconseillé|Ce qui bouge|[Éé]dition|[ée]valuée/);
+});
+
 describe("the slug", () => {
   test("is the name of the post and of its files", () => {
     assert.equal(postSlug(7), "skills-radar-edition-7");
@@ -39,7 +47,7 @@ describe("the frontmatter", () => {
   test("is read back by gray-matter with the title, the images, the date and the author", () => {
     const { data } = matter(renderPost(edition({ number: 3 })));
     assert.deepEqual(data, {
-      title: "Skills Radar — Édition 3",
+      title: "Skills Radar — Edition 3",
       excerpt: "Hello",
       coverImage: "/assets/blog/skills-radar-edition-3/cover.png",
       date: "2026-10-10T00:00:00.000Z",
@@ -71,20 +79,20 @@ describe("the frontmatter", () => {
 });
 
 describe("the radar", () => {
-  test("is the SVG of the edition on one line, followed by the numbered legend in French", () => {
+  test("is the SVG of the edition on one line, followed by the numbered legend in English", () => {
     const body = bodyOf(edition({}, entry("a", { name: "Beta", ring: "try", skills: [skill("1")] }), entry("b", { name: "Alpha", ring: "recommended", skills: [skill("2"), skill("3", { topic: 2 })] })));
     const line = body.split("\n").find((l) => l.includes("<svg"));
     assert.ok(line);
     assert.ok(line.includes("</svg>"));
-    assert.ok(line.includes("Radar des skills: Design, Code, Writing, Tooling"));
-    assert.ok(line.includes("Recommandé") && line.includes("À surveiller"));
-    assert.ok(body.includes("1. Alpha — Recommandé · Design, Writing (2 skills)"));
-    assert.ok(body.includes("2. Beta — À essayer · Design (1 skill)"));
+    assert.ok(line.includes("Skills radar: Design, Code, Writing, Tooling"));
+    assert.ok(line.includes("Recommended") && line.includes("Watch"));
+    assert.ok(body.includes("1. Alpha — Recommended · Design, Writing (2 skills)"));
+    assert.ok(body.includes("2. Beta — Try · Design (1 skill)"));
   });
 
   test("names the topics of each set in its legend line, in the order of the topics, once each", () => {
     const body = bodyOf(edition({}, entry("a", { name: "Alpha", skills: [skill("1", { topic: 3 }), skill("2", { topic: 1 }), skill("3", { topic: 3 })] })));
-    assert.ok(body.includes("1. Alpha — À surveiller · Code, Tooling (3 skills)"));
+    assert.ok(body.includes("1. Alpha — Watch · Code, Tooling (3 skills)"));
   });
 
   test("lists the skills of each set in the title of the radar, with their stars or that they are not rated yet, and keeps the SVG on one line", () => {
@@ -92,17 +100,17 @@ describe("the radar", () => {
     const svg = body.split("\n").find((l) => l.includes("<svg"));
     assert.ok(svg);
     assert.ok(svg.includes("</svg>"));
-    assert.ok(svg.includes("Rated ★★★☆☆") && svg.includes("Fresh (pas encore évaluée)"));
+    assert.ok(svg.includes("Rated ★★★☆☆") && svg.includes("Fresh (not evaluated)"));
   });
 
-  test("words its legend in the masculine, as a set is", () => {
+  test("uses English labels for every change marker", () => {
     const { unchanged, new: added, up, down } = POST_RADAR_LABELS;
-    assert.deepEqual([unchanged, added, up, down], ["Inchangé ou mis à jour", "Nouveau ou de retour", "Rapproché du centre", "Éloigné du centre"]);
+    assert.deepEqual([unchanged, added, up, down], ["Unchanged or updated", "New or back", "Moved in", "Moved out"]);
   });
 
   test("does not break the legend with the characters of a name", () => {
     const body = bodyOf(edition({}, entry("a", { name: "<b>[x]</b> *y*" })));
-    assert.ok(body.includes("1. &lt;b&gt;\\[x\\]&lt;/b&gt; \\*y\\* — À surveiller · Design (1 skill)"));
+    assert.ok(body.includes("1. &lt;b&gt;\\[x\\]&lt;/b&gt; \\*y\\* — Watch · Design (1 skill)"));
   });
 });
 
@@ -111,13 +119,13 @@ describe("what moves", () => {
     const body = bodyOf(
       edition({ number: 1 }, entry("a", { name: "Alpha", ring: "recommended", description: "About alpha.", sourceUrl: "https://a.dev" }), entry("b", { name: "Beta", ring: "try" })),
     );
-    const moves = body.slice(body.indexOf("## Ce qui bouge"));
+    const moves = body.slice(body.indexOf("## What's changed"));
     assert.ok(moves.includes("\n### 1. Alpha\n"));
     assert.ok(moves.includes("\n### 2. Beta\n"));
-    assert.ok(moves.includes("*Nouveau*"));
+    assert.ok(moves.includes("*New*"));
     assert.ok(moves.includes("About alpha."));
     assert.ok(moves.includes("[https://a.dev](https://a.dev)"));
-    assert.ok(!body.includes("## Le reste du radar"));
+    assert.ok(!body.includes("## The rest of the radar"));
   });
 
   test("puts the skills of a set in a table, linked when they have a source, with their stars and their description", () => {
@@ -125,13 +133,13 @@ describe("what moves", () => {
       edition({}, entry("a", { skills: [skill("s1", { name: "Linked", sourceUrl: "https://s.dev", score: 4, description: "Does it." }), skill("s2", { name: "Plain" })] })),
     );
     assert.ok(
-      body.includes("| Skill | Thème | Note | Description |\n| --- | --- | --- | --- |\n| [Linked](https://s.dev) | Design | ★★★★☆ | Does it. |\n| Plain | Design | *Pas encore évaluée* | |"),
+      body.includes("| Skill | Topic | Score | Description |\n| --- | --- | --- | --- |\n| [Linked](https://s.dev) | Design | ★★★★☆ | Does it. |\n| Plain | Design | *Not evaluated* | |"),
     );
   });
 
   test("sorts the skills of the table by topic, keeping their order within a topic, and names the topic of each", () => {
     const body = bodyOf(edition({}, entry("a", { skills: [skill("1", { name: "Late", topic: 3 }), skill("2", { name: "First", topic: 0 }), skill("3", { name: "Later", topic: 3 }), skill("4", { name: "Mid", topic: 1 })] })));
-    assert.ok(body.includes("| Skill | Thème | Note | Description |\n| --- | --- | --- | --- |\n| First | Design | *Pas encore évaluée* | |\n| Mid | Code | *Pas encore évaluée* | |\n| Late | Tooling | *Pas encore évaluée* | |\n| Later | Tooling | *Pas encore évaluée* | |"));
+    assert.ok(body.includes("| Skill | Topic | Score | Description |\n| --- | --- | --- | --- |\n| First | Design | *Not evaluated* | |\n| Mid | Code | *Not evaluated* | |\n| Late | Tooling | *Not evaluated* | |\n| Later | Tooling | *Not evaluated* | |"));
   });
 
   test("escapes the name of a topic in a cell and falls back to the last name for a topic out of range", () => {
@@ -141,7 +149,7 @@ describe("what moves", () => {
 
   test("keeps the cells of the table on their line, whatever the skills hold", () => {
     const body = bodyOf(edition({}, entry("a", { skills: [skill("s1", { name: "A|B", description: "one | two\nthree" })] })));
-    assert.ok(body.includes("| A\\|B | Design | *Pas encore évaluée* | one \\| two three |"));
+    assert.ok(body.includes("| A\\|B | Design | *Not evaluated* | one \\| two three |"));
   });
 
   test("leaves the table out when the set has no skills", () => {
@@ -181,15 +189,15 @@ describe("what moves", () => {
     );
     assert.ok(
       body.includes(
-        "Set notes.\n\n- Ajoutées : A, B\n- Retirées : C\n- Notes : X ★★☆☆☆ → ★★★★☆, Y *Pas encore évaluée* → ★★★☆☆, Z ★★★★★ → *Pas encore évaluée*\n\n| Skill |",
+        "Set notes.\n\n- Added: A, B\n- Removed: C\n- Scores: X ★★☆☆☆ → ★★★★☆, Y *Not evaluated* → ★★★☆☆, Z ★★★★★ → *Not evaluated*\n\n| Skill |",
       ),
     );
     const only = bodyOf(edition({}, entry("a", { change: "moved", previousRing: "try", skillChanges: { added: [], removed: [{ id: "3", name: "C" }], scores: [] } })));
-    assert.ok(only.includes("- Retirées : C") && !only.includes("Ajoutées") && !only.includes("- Notes"));
+    assert.ok(only.includes("- Removed: C") && !only.includes("Added:") && !only.includes("- Scores:"));
   });
 
   test("gives a new set no detail of its skills", () => {
-    assert.ok(!bodyOf(edition({}, entry("a", { skillChanges: { added: [{ id: "1", name: "A" }], removed: [], scores: [] } }))).includes("Ajoutées"));
+    assert.ok(!bodyOf(edition({}, entry("a", { skillChanges: { added: [{ id: "1", name: "A" }], removed: [], scores: [] } }))).includes("Added:"));
   });
 
   test("gives a set of an edition kept in the old form a table row with its stars and its notes under its name", () => {
@@ -218,23 +226,23 @@ describe("what moves", () => {
     const published = readEdition(stored);
     assert.ok(published);
     const body = bodyOf(published);
-    assert.ok(body.includes("1. Old skill — À essayer · Tools (1 skill)"));
+    assert.ok(body.includes("1. Old skill — Try · Tools (1 skill)"));
     assert.ok(body.includes("| Old skill | Tools | ★★★★☆ | Was one skill. |"));
   });
 
   test("groups the cards by ring, from the centre outwards", () => {
     const body = bodyOf(edition({}, entry("w", { name: "W", ring: "watch" }), entry("r", { name: "R", ring: "recommended" })));
     assert.ok(body.indexOf("### 1. R") < body.indexOf("### 2. W"));
-    assert.ok(body.indexOf("**Recommandé**") < body.indexOf("### 1. R"));
+    assert.ok(body.indexOf("**Recommended**") < body.indexOf("### 1. R"));
   });
 
   test("tells where a moved skill comes from and why, and a returning one is back", () => {
     const body = bodyOf(
       edition({}, entry("a", { name: "A", ring: "recommended", change: "moved", previousRing: "try", moveReason: "It proved itself." }), entry("b", { name: "B", change: "back" })),
     );
-    assert.ok(body.includes("*Déplacé : À essayer → Recommandé*"));
+    assert.ok(body.includes("*Moved: Try → Recommended*"));
     assert.ok(body.includes("It proved itself."));
-    assert.ok(body.includes("*De retour*"));
+    assert.ok(body.includes("*Back*"));
   });
 
   test("lowers the headings of the notes so that the highest is ####, but not those of a code fence", () => {
@@ -264,10 +272,10 @@ describe("the rest of the radar", () => {
         entry("b", { name: "Beta", ring: "recommended", change: "updated", skills: [skill("3")] }),
       ),
     );
-    const rest = body.slice(body.indexOf("## Le reste du radar"));
+    const rest = body.slice(body.indexOf("## The rest of the radar"));
     assert.ok(rest.includes("- **1.** [Alpha](https://a.dev) (2 skills)"));
-    assert.ok(rest.includes("- **2.** Beta (1 skill) — *mis à jour*"));
-    assert.ok(!body.includes("## Ce qui bouge"));
+    assert.ok(rest.includes("- **2.** Beta (1 skill) — *updated*"));
+    assert.ok(!body.includes("## What's changed"));
   });
 });
 
@@ -275,20 +283,20 @@ describe("the rest of the radar, updated", () => {
   test("names what changed among the skills of an updated set on its line", () => {
     const skillChanges = { added: [{ id: "1", name: "A" }], removed: [{ id: "3", name: "C" }], scores: [{ id: "4", name: "X", before: 2, after: 4 }] };
     const body = bodyOf(edition({}, entry("a", { name: "Alpha", change: "updated", skillChanges, skills: [skill("1")] }), entry("b", { name: "Beta", change: "updated", skills: [skill("2")] })));
-    assert.ok(body.includes("- **1.** Alpha (1 skill) — *mis à jour* : Ajoutées : A ; Retirées : C ; Notes : X ★★☆☆☆ → ★★★★☆\n"));
-    assert.ok(body.includes("- **2.** Beta (1 skill) — *mis à jour*\n"));
+    assert.ok(body.includes("- **1.** Alpha (1 skill) — *updated*: Added: A; Removed: C; Scores: X ★★☆☆☆ → ★★★★☆\n"));
+    assert.ok(body.includes("- **2.** Beta (1 skill) — *updated*\n"));
   });
 });
 
 describe("the retired sets and the footnote", () => {
   test("lists the retired sets with the ring they left, only when there are some", () => {
-    assert.ok(!bodyOf(edition()).includes("## Retirés du radar"));
+    assert.ok(!bodyOf(edition()).includes("## Retired from the radar"));
     const body = bodyOf(edition({ retired: [{ id: "x", name: "Old", previousRing: "deprecated" }] }));
-    assert.ok(body.includes("## Retirés du radar"));
-    assert.ok(body.includes("- Old — Déconseillé"));
+    assert.ok(body.includes("## Retired from the radar"));
+    assert.ok(body.includes("- Old — Deprecated"));
   });
 
   test("ends with the footnote", () => {
-    assert.ok(bodyOf(edition()).trimEnd().endsWith("*Inspiré du Technology Radar de Thoughtworks.*"));
+    assert.ok(bodyOf(edition()).trimEnd().endsWith("*Inspired by Thoughtworks' Technology Radar.*"));
   });
 });

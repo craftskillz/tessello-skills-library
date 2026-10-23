@@ -6,18 +6,18 @@ import type { Edition, EditionEntry, EditionSkill } from "./editions.ts";
 import { numberEntries, renderRadar, stars, type RadarLabels } from "./radar.ts";
 import { RINGS, type Ring, setTopics } from "./skills.ts";
 
-/** The words of the post, which is written in French; the cover speaks the same. */
-const FRENCH_RINGS: Record<Ring, string> = { recommended: "Recommandé", try: "À essayer", watch: "À surveiller", deprecated: "Déconseillé" };
+/** Publication text is always English, including the radar and cover, regardless of the View's locale. */
+const POST_RINGS: Record<Ring, string> = { recommended: "Recommended", try: "Try", watch: "Watch", deprecated: "Deprecated" };
 export const POST_RADAR_LABELS: RadarLabels = {
-  title: "Radar des skills",
-  rings: FRENCH_RINGS,
-  unchanged: "Inchangé ou mis à jour",
-  new: "Nouveau ou de retour",
-  up: "Rapproché du centre",
-  down: "Éloigné du centre",
-  notEvaluated: "pas encore évaluée",
+  title: "Skills radar",
+  rings: POST_RINGS,
+  unchanged: "Unchanged or updated",
+  new: "New or back",
+  up: "Moved in",
+  down: "Moved out",
+  notEvaluated: "not evaluated",
 };
-const FOOTNOTE = "Inspiré du Technology Radar de Thoughtworks.";
+const FOOTNOTE = "Inspired by Thoughtworks' Technology Radar.";
 const AUTHOR_PICTURE = "/assets/blog/authors/yma_logo.png";
 /** The level of the highest heading of the notes of a set: one under its own. */
 const SET_NOTES_LEVEL = 4;
@@ -42,7 +42,7 @@ export function renderPost(edition: Edition): string {
 
   const frontmatter = [
     "---",
-    `title: ${yamlString(`Skills Radar — Édition ${edition.number}`)}`,
+    `title: ${yamlString(`Skills Radar — Edition ${edition.number}`)}`,
     `excerpt: ${yamlString(plainText(firstParagraph(edition.intro)))}`,
     `coverImage: ${yamlString(cover)}`,
     `date: ${yamlString(edition.publishedAt)}`,
@@ -54,11 +54,11 @@ export function renderPost(edition: Edition): string {
   ].join("\n");
 
   const sections = [edition.intro.trim(), renderRadar(edition.entries, edition.topics, { labels: POST_RADAR_LABELS })];
-  if (entries.length > 0) sections.push(entries.map((entry) => `${entry.number}. ${markdownText(entry.name)} — ${FRENCH_RINGS[entry.ring]}${legendTopics(entry, edition.topics)} (${skillCount(entry)})`).join("\n"));
-  if (moved.length > 0) sections.push("## Ce qui bouge", ...byRing(moved, (group) => card(group, edition.topics)));
-  if (rest.length > 0) sections.push("## Le reste du radar", ...byRing(rest, compactList));
+  if (entries.length > 0) sections.push(entries.map((entry) => `${entry.number}. ${markdownText(entry.name)} — ${POST_RINGS[entry.ring]}${legendTopics(entry, edition.topics)} (${skillCount(entry)})`).join("\n"));
+  if (moved.length > 0) sections.push("## What's changed", ...byRing(moved, (group) => card(group, edition.topics)));
+  if (rest.length > 0) sections.push("## The rest of the radar", ...byRing(rest, compactList));
   if (edition.retired.length > 0) {
-    sections.push("## Retirés du radar", edition.retired.map((skill) => `- ${markdownText(skill.name)} — ${FRENCH_RINGS[skill.previousRing]}`).join("\n"));
+    sections.push("## Retired from the radar", edition.retired.map((skill) => `- ${markdownText(skill.name)} — ${POST_RINGS[skill.previousRing]}`).join("\n"));
   }
   sections.push(`*${FOOTNOTE}*`);
   return `${frontmatter}\n\n${sections.join("\n\n")}\n`;
@@ -68,7 +68,7 @@ export function renderPost(edition: Edition): string {
 function byRing(entries: readonly Numbered[], render: (entries: Numbered[]) => string): string[] {
   return RINGS.flatMap((ring) => {
     const group = entries.filter((entry) => entry.ring === ring);
-    return group.length > 0 ? [`**${FRENCH_RINGS[ring]}**`, render(group)] : [];
+    return group.length > 0 ? [`**${POST_RINGS[ring]}**`, render(group)] : [];
   });
 }
 
@@ -98,7 +98,7 @@ function skillTable(skills: readonly EditionSkill[], topics: readonly string[]):
     const description = cell(skill.description).trim();
     return `| ${skill.sourceUrl ? `[${name}](${destination(skill.sourceUrl)})` : name} | ${cell(topicName(topics, skill.topic))} | ${rating(skill.score)} |${description ? ` ${description} ` : " "}|`;
   });
-  return ["| Skill | Thème | Note | Description |", "| --- | --- | --- | --- |", ...rows].join("\n");
+  return ["| Skill | Topic | Score | Description |", "| --- | --- | --- | --- |", ...rows].join("\n");
 }
 
 /** A line per set: its number, its name, linked when it has a source, its number of skills, and whether it was updated. */
@@ -107,7 +107,7 @@ function compactList(entries: Numbered[]): string {
     .map((entry) => {
       const name = markdownText(entry.name);
       const title = entry.sourceUrl ? `[${name}](${destination(entry.sourceUrl)})` : name;
-      return `- **${entry.number}.** ${title} (${skillCount(entry)})${entry.change === "updated" ? ` — *mis à jour*${entry.skillChanges ? ` : ${changeParts(entry.skillChanges).join(" ; ")}` : ""}` : ""}`;
+      return `- **${entry.number}.** ${title} (${skillCount(entry)})${entry.change === "updated" ? ` — *updated*${entry.skillChanges ? `: ${changeParts(entry.skillChanges).join("; ")}` : ""}` : ""}`;
     })
     .join("\n");
 }
@@ -131,20 +131,20 @@ const skillCount = (entry: EditionEntry) => `${entry.skills.length} skill${entry
 function changeParts({ added, removed, scores }: SkillChanges): string[] {
   const names = (skills: { name: string }[]) => skills.map((skill) => markdownText(skill.name)).join(", ");
   const parts: string[] = [];
-  if (added.length > 0) parts.push(`Ajoutées : ${names(added)}`);
-  if (removed.length > 0) parts.push(`Retirées : ${names(removed)}`);
-  if (scores.length > 0) parts.push(`Notes : ${scores.map((score) => `${markdownText(score.name)} ${rating(score.before)} → ${rating(score.after)}`).join(", ")}`);
+  if (added.length > 0) parts.push(`Added: ${names(added)}`);
+  if (removed.length > 0) parts.push(`Removed: ${names(removed)}`);
+  if (scores.length > 0) parts.push(`Scores: ${scores.map((score) => `${markdownText(score.name)} ${rating(score.before)} → ${rating(score.after)}`).join(", ")}`);
   return parts;
 }
 
 /** A score as five stars, or that the skill is not rated yet. */
-const rating = (score: number | undefined) => (score === undefined ? "*Pas encore évaluée*" : stars(score));
+const rating = (score: number | undefined) => (score === undefined ? "*Not evaluated*" : stars(score));
 
 /** What changed, as the card shows it. */
 function badge(entry: Numbered): string {
-  if (entry.change === "new") return "Nouveau";
-  if (entry.change === "back") return "De retour";
-  return `Déplacé : ${entry.previousRing ? FRENCH_RINGS[entry.previousRing] : "?"} → ${FRENCH_RINGS[entry.ring]}`;
+  if (entry.change === "new") return "New";
+  if (entry.change === "back") return "Back";
+  return `Moved: ${entry.previousRing ? POST_RINGS[entry.previousRing] : "?"} → ${POST_RINGS[entry.ring]}`;
 }
 
 /**
