@@ -4,17 +4,31 @@
   "private": true,
   "description": "Skills Library: keep the agent skills you judge, and publish them as a radar.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/craftskillz/tessello-skills-library.git"
+  },
+  "homepage": "https://github.com/craftskillz/tessello-skills-library#readme",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
-    "build": "node scripts/build.ts"
+    "build": "node scripts/build.ts",
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc -p ."
   },
   "dependencies": {
     "@tessello/sdk": "0.1.0",
     "fflate": "^0.8.3"
   },
   "devDependencies": {
+    "@types/node": "^24.10.0",
+    "esbuild": "^0.28.2",
     "esbuild-svelte": "^0.9.5",
     "gray-matter": "^4.0.3",
-    "svelte": "^5.57.2"
+    "svelte": "^5.57.2",
+    "tessello": "0.1.0",
+    "typescript": "~5.9.3"
   }
 }

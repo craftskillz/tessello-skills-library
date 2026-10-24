@@ -152,3 +152,7 @@ If the Module cannot read your saved data, it blocks adding sets and offers **Tr
 - **Editions** lists the editions you published, the newest first, each with its **Download .zip**.
 
 The page remembers the tab you left it on.
+
+## About Skills Library
+
+Skills Library is a Module of [Tessello](https://github.com/craftskillz/tessello), published by @craftskillz under the MIT license. Its sources, its versions and its issues are at https://github.com/craftskillz/tessello-skills-library.
