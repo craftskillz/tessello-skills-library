@@ -28,7 +28,7 @@
     "esbuild-svelte": "^0.9.5",
     "gray-matter": "^4.0.3",
     "svelte": "^5.57.2",
-    "tessello": "0.1.0",
+    "tessello": "0.2.0",
     "typescript": "~5.9.3"
   }
 }
